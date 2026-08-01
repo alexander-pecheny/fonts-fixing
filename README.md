@@ -1,7 +1,7 @@
 # fonts-fixing
 
-Scripts for patching fonts that typeset Russian badly, plus the proof renderer used to
-check the results by eye. Everything runs through `uv` and needs `typst` on PATH for proofs.
+Scripts that tweak fonts for Russian typesetting, plus the proof renderer used to check
+the results by eye. Everything runs through `uv` and needs `typst` on PATH for proofs.
 
 ## Stress marks (U+0301)
 
@@ -21,7 +21,7 @@ so the result matches its precomposed `Á`/`á`. Two refinements matter in pract
 `recenter_acute` handles the opposite case, where an anchor exists but sits somewhere
 Russian does not want it: Geist hangs the mark over ы's right stroke rather than the middle.
 
-A font can also have every anchor it needs and still typeset the acute wrong. GPOS lists
+A font can also have every anchor it needs and still leave the acute unplaced. GPOS lists
 its features per script, and a shaper that finds the script tag stops looking instead of
 falling back to `DFLT` — so a `cyrl` entry that lists `kern` and not `mark` turns mark
 positioning off for Russian while the lookups sit unused in the file. `enable_features`
