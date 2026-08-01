@@ -41,13 +41,13 @@ image, so before/after versions of the same font can sit side by side.
 
 Built copies live in `fonts/`; install with `cp -r fonts/GeistFix ~/Library/Fonts/`.
 
-| Font | What was wrong |
+| Font | What the script changes |
 | --- | --- |
 | `build_geist_fix.py` → Geist Fix | Anchors U+0301 over every Cyrillic vowel, but registers `mark` only under `latn`, so none of it applied to Russian. Also moves ы off its right stroke. Patches all 18 static styles. |
 | `build_inter_fix.py` → Inter Fix | Same unregistered `cyrl` script as Geist, plus Ю and я were never anchored. Rewrites the whole 36-face collection, Inter and Inter Display alike. |
 | `build_roboto_flex_fix.py` → Roboto Flex Fix | No Cyrillic acute anchors, and typst ignores variable axes so every weight rendered as Regular. Emits static Regular/Italic/Bold/Bold Italic. |
-| `build_sofia_sans_ru.py` → Sofia Sans Ru | Bulgarian letterforms by default (moved to ss01), no acute anchors on Cyrillic vowels. |
-| `pliant-kerning/batch.py` → Pliant | Almost no Cyrillic kerning, and the single-storey `a` was the default. |
+| `build_sofia_sans_ru.py` → Sofia Sans Ru | Sofia Sans ships Bulgarian letterforms as the default; this variant makes the Russian ones default and keeps the Bulgarian set on ss01. Also adds acute anchors on Cyrillic vowels. |
+| `pliant-kerning/batch.py` → Pliant | Almost no Cyrillic kerning. Also promotes the double-storey `a` to the default, which is a taste call rather than a fix. |
 
 All five upstreams are under the SIL Open Font License, which the patched copies inherit.
 `OFL.txt` ships next to the fonts that came with one; [Geist](https://github.com/vercel/geist-font),
