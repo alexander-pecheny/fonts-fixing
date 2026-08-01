@@ -20,7 +20,7 @@ from acutefix import add_acute_anchors
 SRC = os.path.expanduser(
     "~/Library/Fonts/RobotoFlex[GRAD,XOPQ,XTRA,YOPQ,YTAS,YTDE,YTFI,YTLC,YTUC,opsz,slnt,wdth,wght].ttf"
 )
-DST = os.path.expanduser("~/Library/Fonts/RobotoFlexFix")
+DST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fonts", "RobotoFlexFix")
 FAMILY = "Roboto Flex Fix"
 PSFAMILY = "RobotoFlexFix"
 

@@ -10,11 +10,22 @@ import sys
 
 from fontTools.ttLib import TTFont
 
-from acutefix import ACUTE, LOWER, UPPER, contours, find_mark_bases, pointing_tip
+from acutefix import ACUTE, LOWER, UPPER, contours, find_mark_bases, langsyses, pointing_tip
+
+
+def mark_scripts(font):
+    """Which GPOS scripts run the `mark` feature, and which list it nowhere."""
+    t = font["GPOS"].table
+    feats = t.FeatureList.FeatureRecord
+    on, off = [], []
+    for sr in t.ScriptList.ScriptRecord:
+        tags = {feats[i].FeatureTag for ls in langsyses(sr) for i in ls.FeatureIndex}
+        (on if "mark" in tags else off).append(sr.ScriptTag)
+    return on, off
 
 
 def report(path):
-    font = TTFont(path)
+    font = TTFont(path, fontNumber=0) if path.endswith(".ttc") else TTFont(path)
     cmap = font.getBestCmap()
     print(f"=== {path}")
     print("family:", font["name"].getDebugName(1), "|", font["name"].getDebugName(2))
@@ -30,6 +41,8 @@ def report(path):
         return
     st = subtables[0]
     anchored = {g for sub in subtables for g in sub.BaseCoverage.glyphs}
+    on, off = mark_scripts(font)
+    print(f"mark feature: on for {' '.join(on)}" + (f", MISSING from {' '.join(off)}" if off else ""))
     print(
         f"mark-to-base: {len(subtables)} subtable(s), "
         f"{len(st.MarkCoverage.glyphs)} marks, {len(anchored)} bases"
