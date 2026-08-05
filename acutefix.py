@@ -168,7 +168,7 @@ def recenter_acute(font, codepoints):
     return moved
 
 
-def add_acute_anchors(font, point_at_center=True, uppercase=UPPER, lowercase=LOWER):
+def add_acute_anchors(font, point_at_center=True, uppercase=UPPER, lowercase=LOWER, bowl=BOWL):
     """Anchor U+0301 over the Cyrillic vowels the font left out. Returns added glyph names."""
     cmap = font.getBestCmap()
     gs = font.getGlyphSet()
@@ -203,7 +203,7 @@ def add_acute_anchors(font, point_at_center=True, uppercase=UPPER, lowercase=LOW
         x = twin and mirrored_x(gs, twin[0], g, twin[1].XCoordinate)
         if x is not None:
             return x
-        return bowl_center(gs, g) if cp in BOWL else bbox_center(gs, g)
+        return bowl_center(gs, g) if cp in bowl else bbox_center(gs, g)
 
     bases = {}
     for cps, y in ((uppercase, donor_y(REF_UPPER)), (lowercase, donor_y(REF_LOWER))):

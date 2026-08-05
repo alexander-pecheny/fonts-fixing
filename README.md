@@ -17,6 +17,9 @@ so the result matches its precomposed `Á`/`á`. Two refinements matter in pract
 - The acute is usually a steeply slanted parallelogram. Centering its bounding box makes it
   read as pointing at the left half of the letter, so the midpoint of its lower edge — the
   end it visually points with — is what gets centered instead.
+- Both of those are defaults, not laws, and `bowl` / `point_at_center` turn them off. A font
+  that puts every anchor it has on the plain bounding-box center is stating a convention, and
+  the added letters look wrong unless they follow it — that is what IBM Plex needed.
 
 `recenter_acute` handles the opposite case, where an anchor exists but sits somewhere
 Russian does not want it: Geist hangs the mark over ы's right stroke rather than the middle.
@@ -45,11 +48,12 @@ Built copies live in `fonts/`; install with `cp -r fonts/GeistFix ~/Library/Font
 | --- | --- |
 | `build_geist_fix.py` → Geist Fix | Anchors U+0301 over every Cyrillic vowel, but registers `mark` only under `latn`, so none of it applied to Russian. Also moves ы off its right stroke. Patches all 18 static styles. |
 | `build_inter_fix.py` → Inter Fix | Same unregistered `cyrl` script as Geist, plus Ю and я were never anchored. Rewrites the whole 36-face collection, Inter and Inter Display alike. |
+| `build_ibm_plex_fix.py` → IBM Plex Sans Fix, IBM Plex Serif Fix | Ё, Э, Ю and Я are the vowels Plex never anchored; the rest of its Cyrillic already works. Both families, 16 styles each. |
 | `build_roboto_flex_fix.py` → Roboto Flex Fix | No Cyrillic acute anchors, and typst ignores variable axes so every weight rendered as Regular. Emits static Regular/Italic/Bold/Bold Italic. |
 | `build_sofia_sans_ru.py` → Sofia Sans Ru | Sofia Sans ships Bulgarian letterforms as the default; this variant makes the Russian ones default and keeps the Bulgarian set on ss01. Also adds acute anchors on Cyrillic vowels. |
 | `pliant-kerning/batch.py` → Pliant | Almost no Cyrillic kerning. Also promotes the double-storey `a` to the default, which is a taste call rather than a fix. |
 
-All five upstreams are under the SIL Open Font License, which the patched copies inherit.
+All six upstreams are under the SIL Open Font License, which the patched copies inherit.
 `OFL.txt` ships next to the fonts that came with one; [Geist](https://github.com/vercel/geist-font),
 [Inter](https://github.com/rsms/inter) and [Roboto Flex](https://github.com/googlefonts/roboto-flex)
 keep theirs upstream.
