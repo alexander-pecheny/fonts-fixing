@@ -14,6 +14,7 @@ ACUTE = 0x0301
 UPPER = [0x0410, 0x0415, 0x0401, 0x0418, 0x041E, 0x0423, 0x042B, 0x042D, 0x042E, 0x042F]
 LOWER = [c + (0x50 if c == 0x0401 else 0x20) for c in UPPER]
 BOWL = {0x042E, 0x044E}  # Ю ю: over the round bowl on the right, not the whole bbox
+DOTS = {0x0401: 0x0415, 0x0451: 0x0435}  # Ё ё and the plain letter under their diaeresis
 CASE = dict(zip(UPPER, LOWER)) | dict(zip(LOWER, UPPER))
 REF_UPPER = (0x041E, 0x004F)  # О, O — anchor height donors for uppercase
 REF_LOWER = (0x043E, 0x006F)  # о, o
@@ -79,6 +80,12 @@ def bowl_center(glyphset, name):
         return bbox_center(glyphset, name)
     b = max(holes, key=lambda b: b[2])
     return round((b[0] + b[2]) / 2)
+
+
+def diaeresis_height(glyphset, cmap, cp):
+    """How far Ё's dots reach above plain Е — the acute has to clear them."""
+    dotted, plain = bbox(glyphset, cmap[cp]), bbox(glyphset, cmap[DOTS[cp]])
+    return round(max(0, dotted[3] - plain[3]))
 
 
 def pointing_tip(glyphset, name):
@@ -213,7 +220,8 @@ def add_acute_anchors(font, point_at_center=True, uppercase=UPPER, lowercase=LOW
                 continue
             x = anchor_x(cp, g)
             if x is not None:
-                bases[g] = {cls: ob.buildAnchor(x, y)}
+                rise = diaeresis_height(gs, cmap, cp) if cp in DOTS else 0
+                bases[g] = {cls: ob.buildAnchor(x, y + rise)}
     if not bases:
         return []
 

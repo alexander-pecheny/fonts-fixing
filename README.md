@@ -17,9 +17,12 @@ so the result matches its precomposed `Á`/`á`. Two refinements matter in pract
 - The acute is usually a steeply slanted parallelogram. Centering its bounding box makes it
   read as pointing at the left half of the letter, so the midpoint of its lower edge — the
   end it visually points with — is what gets centered instead.
-- Both of those are defaults, not laws, and `bowl` / `point_at_center` turn them off. A font
-  that puts every anchor it has on the plain bounding-box center is stating a convention, and
-  the added letters look wrong unless they follow it — that is what IBM Plex needed.
+- That last one is a default rather than a law: a font whose own anchors already sit where the
+  acute reads right has said the same thing in its outline, and applying the tip rule on top
+  shifts every added mark further right than the ones the designer placed. IBM Plex is such a
+  font, so its build passes `point_at_center=False`.
+- Ё and ё get the acute raised by however far their dots clear plain Е, so it stacks above the
+  diaeresis instead of landing in it.
 
 `recenter_acute` handles the opposite case, where an anchor exists but sits somewhere
 Russian does not want it: Geist hangs the mark over ы's right stroke rather than the middle.

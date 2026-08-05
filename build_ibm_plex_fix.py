@@ -7,9 +7,8 @@ Plex registers `mark` under `cyrl` and anchors most Cyrillic vowels, but leaves
 Ё, Э, Ю and Я out of the mark-to-base coverage, so a combining acute after any
 of them lands past the letter.
 
-Plex anchors every base it does cover on the glyph's bounding-box center, and
-draws the acute so that anchor already reads right, so the added letters follow
-the same rule instead of the bowl and pointing-tip adjustments other fonts need.
+Plex draws its acute so that the designer's own anchors already read right, so
+the added letters keep the font's mark anchor rather than the pointing-tip one.
 
     uv run build_ibm_plex_fix.py
 """
@@ -44,7 +43,7 @@ def main():
         src = os.path.expanduser(f"~/Library/Fonts/ibm-plex-{family.lower()}/fonts/complete/ttf/*.ttf")
         for path in sorted(glob.glob(src)):
             font = TTFont(path)
-            anchors = add_acute_anchors(font, point_at_center=False, bowl=())
+            anchors = add_acute_anchors(font, point_at_center=False)
             rename(font, family)
             stem = os.path.basename(path).replace(f"IBMPlex{family}-", f"IBMPlex{family}Fix-")
             out = os.path.join(dst, stem)
