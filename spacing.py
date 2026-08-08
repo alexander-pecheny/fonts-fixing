@@ -8,7 +8,6 @@ minimum over the scanlines where both letters have ink.
 """
 
 import numpy as np
-import uharfbuzz as hb
 from fontTools.pens.basePen import BasePen
 from fontTools.pens.recordingPen import DecomposingRecordingPen
 from fontTools.ttLib.tables import otTables as ot
@@ -169,6 +168,8 @@ def trough(left, right, kern, kernel, pixel=PIXEL):
 
 def kerner(data):
     """Returns the kerning a shaper already applies to a pair, in font units."""
+    import uharfbuzz as hb  # only shaping needs it; the geometry here does not
+
     font = hb.Font(hb.Face(data))
 
     def kern(a, b):
