@@ -43,6 +43,27 @@ uv run proof.py "Roboto Flex Fix" some/older-version.ttf --size 100
 `proof.py` takes installed family names and/or .ttf paths and renders them as rows of one
 image, so before/after versions of the same font can sit side by side.
 
+## Cyrillic spacing
+
+Sidebearings are a poor guide to how a serif face is spaced. The stem stands well back
+from the advance and only its serifs reach out, so two flat-sided letters keep a white
+channel two or three times wider than their sidebearings suggest. `spacing.py` measures
+the pair itself: a soft minimum of that channel over the scanlines where both letters
+have ink, which tracks what the eye calls the gap.
+
+By that measure Literata's Cyrillic is consistent but not even. An additive model — one
+number for a letter's right side, one for its left — predicts every pair to within eight
+units, so nothing is mis-kerned in the usual sense. What the model cannot hide is that
+the flat-sided letters, which is most of the Cyrillic lowercase, sit about 40 units wider
+than the round ones. That is why ЧР opens a hole beside ОС, and why the last в of
+вопросов drifts: they are the font's own rhythm, applied evenly to letters it does not
+suit. Source Serif, PT Serif, STIX Two Text and Georgia all keep the two groups closer.
+
+`build_literata_fix.py` pulls the wide pairs part of the way towards the quarter the font
+already sets tightest and leaves everything at or below that mark alone. Roughly seven of
+every ten Cyrillic pairs move, by a median of 20 units. That is a taste call about which
+end of the font's own range to trust, not a defect being repaired.
+
 ## Math in Literata
 
 A math font is one file that carries a MATH table, every symbol, and the letters that
@@ -77,6 +98,7 @@ Built copies live in `fonts/`; install with `cp -r fonts/GeistFix ~/Library/Font
 | `build_roboto_flex_fix.py` → Roboto Flex Fix | No Cyrillic acute anchors, and typst ignores variable axes so every weight rendered as Regular. Emits static Regular/Italic/Bold/Bold Italic. |
 | `build_sofia_sans_ru.py` → Sofia Sans Ru | Sofia Sans ships Bulgarian letterforms as the default; this variant makes the Russian ones default and keeps the Bulgarian set on ss01. Also adds acute anchors on Cyrillic vowels. |
 | `pliant-kerning/batch.py` → Pliant | Almost no Cyrillic kerning. Also promotes the double-storey `a` to the default, which is a taste call rather than a fix. |
+| `build_literata_fix.py` → Literata Fix | Cyrillic flat-sided pairs are set much wider than round ones, so stems open holes in a word. Adds kerning to even the rhythm out; both variable fonts and all four statics. |
 | `build_literata_math.py` → Literata Math | Literata has no MATH table. Puts its letters, digits, Greek and Cyrillic into STIX Two Math, scaled to Literata's x-height. |
 
 All seven upstreams are under the SIL Open Font License, which the patched copies inherit.

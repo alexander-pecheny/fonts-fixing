@@ -40,6 +40,7 @@ def main():
     ap.add_argument("--size", type=int, default=60)
     ap.add_argument("--words", default=WORDS)
     ap.add_argument("--ppi", type=int, default=120)
+    ap.add_argument("--no-accents", action="store_true", help="words only, for spacing proofs")
     args = ap.parse_args()
 
     tmp = tempfile.mkdtemp(prefix="proof-fonts-")
@@ -56,12 +57,13 @@ def main():
         f"#set page(width: auto, height: auto, margin: 24pt)",
         f'#set text(size: 11pt, lang: "ru")',
     ]
+    body = args.words if args.no_accents else f"{UPPER_ROW} \\ {LOWER_ROW} \\ {args.words}"
     for family, caption in rows:
         lines += [
             f"{caption}\\",
             # bounds edges keep tall stacked accents from colliding with the row above
             f'#text(font: "{family}", size: {args.size}pt, top-edge: "bounds", bottom-edge: "bounds")'
-            f"[{UPPER_ROW} \\ {LOWER_ROW} \\ {args.words}]",
+            f"[{body}]",
             "#v(18pt)",
         ]
     src = os.path.join(tmp, "proof.typ")
