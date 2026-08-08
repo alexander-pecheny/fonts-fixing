@@ -51,18 +51,31 @@ channel two or three times wider than their sidebearings suggest. `spacing.py` m
 the pair itself: a soft minimum of that channel over the scanlines where both letters
 have ink, which tracks what the eye calls the gap.
 
-By that measure Literata's Cyrillic is consistent but not even. An additive model — one
-number for a letter's right side, one for its left — predicts every pair to within eight
-units, so nothing is mis-kerned in the usual sense. What the model cannot hide is that
-the flat-sided letters, which is most of the Cyrillic lowercase, sit about 40 units wider
-than the round ones. That is why ЧР opens a hole beside ОС, and why the last в of
-вопросов drifts: they are the font's own rhythm, applied evenly to letters it does not
-suit. Source Serif, PT Serif, STIX Two Text and Georgia all keep the two groups closer.
+How those gaps are boiled down to one number matters more than it looks. A power mean
+with a low exponent counts the narrowest scanline for almost everything; with a high one
+it becomes the plain average. Both look reasonable and they rank pairs differently, so
+the exponent is not something to pick by eye. It can be fitted: a measure worth trusting
+comes out the same for every pair a designer set correctly, so the exponent to use is the
+one that varies least across the font's own Latin, kerning included. For Literata that is
+about −0.5, and the flat-versus-round split that steeper exponents report is an artefact
+of the aggregation rather than a property of the font.
 
-`build_literata_fix.py` pulls the wide pairs part of the way towards the quarter the font
-already sets tightest and leaves everything at or below that mark alone. Roughly seven of
-every ten Cyrillic pairs move, by a median of 20 units. That is a taste call about which
-end of the font's own range to trust, not a defect being repaired.
+Fitted that way, Literata's Cyrillic needs no respacing. Its О is the Latin O outline on
+the same advance, н is the stems of n, Р is P; wherever a pair of letters is shared, the
+two scripts measure identically — ОС and OC both come to 168 units, НН and HH to 248. The
+difference is kerning coverage. The font kerns about a third of its Latin pairs and half
+as many Cyrillic ones, so РО keeps a gap that PO does not.
+
+`build_literata_fix.py` closes that gap and nothing else. Each Cyrillic side is matched to
+the nearest Latin profile — н to i on both sides, Р to P and B, Ч to H and V — and a pair
+inherits the kerning of the Latin pair behind it, but only where that tightens. Around 340
+pairs move in the Regular, by a median of 10 units. Sides with no Latin analogue, ъ and ь
+on the left and Ч to the right of its arm, fall outside the tolerance and keep what they
+have.
+
+What this does not do is close the gaps that a reader notices in a word like ОСЧР. Ч|Р
+there is spaced exactly as H|B is, and о|в as o|i: it is the font's own rhythm, and the
+Latin inherits it too. Tightening those is a taste call about the typeface, not a repair.
 
 ## Math in Literata
 
@@ -98,7 +111,7 @@ Built copies live in `fonts/`; install with `cp -r fonts/GeistFix ~/Library/Font
 | `build_roboto_flex_fix.py` → Roboto Flex Fix | No Cyrillic acute anchors, and typst ignores variable axes so every weight rendered as Regular. Emits static Regular/Italic/Bold/Bold Italic. |
 | `build_sofia_sans_ru.py` → Sofia Sans Ru | Sofia Sans ships Bulgarian letterforms as the default; this variant makes the Russian ones default and keeps the Bulgarian set on ss01. Also adds acute anchors on Cyrillic vowels. |
 | `pliant-kerning/batch.py` → Pliant | Almost no Cyrillic kerning. Also promotes the double-storey `a` to the default, which is a taste call rather than a fix. |
-| `build_literata_fix.py` → Literata Fix | Cyrillic flat-sided pairs are set much wider than round ones, so stems open holes in a word. Adds kerning to even the rhythm out; both variable fonts and all four statics. |
+| `build_literata_fix.py` → Literata Fix | Cyrillic reuses the Latin outlines but not the Latin kerning, so РО keeps a gap PO does not. Matches each Cyrillic side to the Latin shape it is drawn from and carries the kerning over; both variable fonts and all four statics. |
 | `build_literata_math.py` → Literata Math | Literata has no MATH table. Puts its letters, digits, Greek and Cyrillic into STIX Two Math, scaled to Literata's x-height. |
 
 All seven upstreams are under the SIL Open Font License, which the patched copies inherit.
