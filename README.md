@@ -79,35 +79,35 @@ Latin inherits it too. Tightening those is a taste call about the typeface, not 
 
 ## Making every pair read alike
 
-`build_literata_uniform.py` is that taste call, made deliberately. A reader does not
-measure the gap between two letters, they see how light the page goes between them, so
-each pair is rasterised, blurred the way an eye blurs a page at text size, and read at
-its lightest column. The kern that brings every pair to one common reading is what ships.
-Blurring commutes with summing down the columns, so this never needs a glyph in two
-dimensions: a pair is the sum of two shifted column profiles.
+`build_literata_uniform.py` is a taste call made deliberately, and the several wrong
+turns behind it are the interesting part. Every attempt that scored a pair on its own
+lost, because a pair on its own is not what anyone looks at. Blurred darkness between
+two letters ranks a visibly clumping font as the best of the bunch. So does the amount
+of light. Fitting the blur radius is worse than useless: asking which radius disturbs
+the designer's own kerning least rewards a model that proposes nothing, and asking
+which makes the Latin read most uniformly rewards blurring the page to mush.
 
-The blur radius decides the answer rather than refining it. Wide, and two stems read as
-tight because their ink bleeds across the gap; narrow, and the same pair reads as loose.
-It cannot be fitted, which took a while to admit. Sweeping for the radius that disturbs
-the designer's own Latin kerning least rewards a model that proposes nothing and bottoms
-out at the smallest radius offered; sweeping for the radius that makes the designer's
-Latin read most uniformly rewards blurring the page to mush and runs to the largest.
-Neither has an interior minimum. So the radius is an assumption about a reader, the sweep
-picks its cautious end, and this build moves little. It is still swept per face, which
-stops the Bold inheriting the Regular's figure and pulling отб together twice as hard as
-its own weight asks for.
+What works is to score the page. The document's own words are set with the font, the
+line is blurred the way an eye blurs a page, and the light between each pair is
+measured in context with its neighbours bleeding in. The reading that matters is how
+*wide* the light runs, not how dark it goes — clumping is variation in width — and
+that is the one reading of three that ranks a shelf of already-judged fonts the way a
+reader does. The score is the spread of those widths, and the kerns are walked down
+until it stops falling. The walk overshoots at full stride, since neighbouring gaps
+pull on each other through the blur, so it is damped and the best round kept.
 
-Two guards matter more than the radius. Nothing may end up with less clearance than the
-tightest fit the font already uses anywhere, or the model will happily push letters until
-they touch — ал collided that way, a pair Literata had deliberately opened by 10 units.
-And Latin moves with the Cyrillic, since evening out one script and not the other only
-relocates the unevenness.
+On the test document the spread falls from 0.24 to 0.14 with the median pair unmoved,
+and the result beats Literata on all three readings at once. Only pairs the corpus
+contains are touched, so this is a font tuned to a text rather than a font in general.
 
-What no version of this managed is the round pairs. Every measure tried — power means over
-the scanline gaps, blurred troughs at seven radii, per-side white areas, and the two in
-sequence — wants оо and ОС opened by 45 to 85 units, against both Literata's designer and
-all five reference faces measured. A single number for "evenly spaced" keeps disagreeing
-with the people who do this by hand, by 13 units per pair at its closest.
+Three pairs are set by eye rather than measured. A round letter meeting a recessed
+stem — ор, ар, ов — never lets the blurred line go light between the two, so the
+optimiser reads them as too tight and pulls them apart, which is exactly backwards.
+They are in a table at the top of the script. Fixing that properly means measuring
+where the two letters actually face each other, and the attempts at that are in
+`scratchpad/`: reading band by band and dropping the bands only one letter occupies
+does fix To, whose arm otherwise fills the gap, but taking the widest band lets one
+open band speak for the whole pair and the words clump again.
 
 ## Math in Literata
 
@@ -144,7 +144,7 @@ Built copies live in `fonts/`; install with `cp -r fonts/GeistFix ~/Library/Font
 | `build_sofia_sans_ru.py` → Sofia Sans Ru | Sofia Sans ships Bulgarian letterforms as the default; this variant makes the Russian ones default and keeps the Bulgarian set on ss01. Also adds acute anchors on Cyrillic vowels. |
 | `pliant-kerning/batch.py` → Pliant | Almost no Cyrillic kerning. Also promotes the double-storey `a` to the default, which is a taste call rather than a fix. |
 | `build_literata_fix.py` → Literata Fix | Cyrillic reuses the Latin outlines but not the Latin kerning, so РО keeps a gap PO does not. Matches each Cyrillic side to the Latin shape it is drawn from and carries the kerning over; both variable fonts and all four statics. |
-| `build_literata_uniform.py` → Literata Uniform | Kerns every letter pair, Latin and Cyrillic, so that all of them read equally light under a blur fitted to the font's own Latin. Overrules the designer by design; see the section above. |
+| `build_literata_uniform.py` → Literata Uniform | Kerns the pairs a given document contains so the blurred page shows an even width of light between letters. Tuned to a text, and overrules the designer by design; see the section above. |
 | `build_literata_math.py` → Literata Math | Literata has no MATH table. Puts its letters, digits, Greek and Cyrillic into STIX Two Math, scaled to Literata's x-height. |
 
 All seven upstreams are under the SIL Open Font License, which the patched copies inherit.

@@ -112,6 +112,38 @@ def ink_columns(font, glyph_name, band=BAND, pixel=PIXEL):
     return columns, advance
 
 
+def sector_columns(font, glyph_name, sectors, band=BAND, pixel=PIXEL):
+    """Ink per column, kept separately for each horizontal band of the glyph.
+
+    Collapsing a glyph's whole height into one profile lets a capital's shoulders
+    fill the gap beside a lowercase letter; keeping the bands apart does not.
+    """
+    glyphs = font.getGlyphSet()
+    record = DecomposingRecordingPen(glyphs)
+    glyphs[glyph_name].draw(record)
+    pen = FlattenPen(glyphs)
+    record.replay(pen)
+    pen._closePath()
+
+    edges = np.linspace(band[0], band[1], sectors + 1)
+    out = np.zeros((sectors, int(font["hmtx"][glyph_name][0] / pixel) + 4))
+    for index in range(sectors):
+        for y in np.arange(edges[index], edges[index + 1], pixel):
+            crossings = []
+            for polygon in (p for p in pen.polygons if len(p) > 2):
+                points = polygon + [polygon[0]]
+                for (x0, y0), (x1, y1) in zip(points, points[1:]):
+                    if (y0 <= y < y1) or (y1 <= y < y0):
+                        crossings.append((x0 + (x1 - x0) * (y - y0) / (y1 - y0), 1 if y1 > y0 else -1))
+            crossings.sort()
+            winding = 0
+            for (start, direction), (end, _) in zip(crossings, crossings[1:]):
+                winding += direction  # nonzero winding, so overlapping contours still fill
+                if winding:
+                    out[index, max(int(start / pixel), 0) : max(int(end / pixel), 0)] += 1
+    return out
+
+
 def gaussian(sigma, pixel=PIXEL):
     x = np.arange(-int(3 * sigma / pixel), int(3 * sigma / pixel) + 1) * pixel
     kernel = np.exp(-0.5 * (x / sigma) ** 2)
