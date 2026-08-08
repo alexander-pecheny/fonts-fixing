@@ -33,7 +33,7 @@ import re
 import numpy as np
 from fontTools.ttLib import TTFont
 
-from spacing import add_kern_lookup, gaussian, kerner, sector_columns
+from spacing import BAND, add_kern_lookup, gaussian, kerner, scan, sector_columns
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SOURCE = os.path.expanduser("~/Library/Fonts/Literata")
@@ -41,10 +41,7 @@ PIXEL, SECTORS, BLUR = 5, 12, 0.22  # blur as a fraction of x-height
 RATE, ROUNDS, LIMIT, STEP = 0.25, 8, 60, 5
 LEVEL = 60  # the page counts as light below this percentile of its own density
 
-# The optimiser reads a dense pair as too tight, because a round letter meeting a
-# recessed stem never lets the blurred line go light between them. These three were
-# called wrong by eye, so they are set by eye; everything else is measured.
-HAND = {("о", "р"): -10, ("а", "р"): -10, ("о", "в"): -15}
+CLOSEST = 85  # percentile of nearest approaches beyond which a pair is pulled in
 
 
 def corpus(path, limit=600):
@@ -62,6 +59,21 @@ def evener(font, data, words):
     stacks = {c: sector_columns(font, cmap[ord(c)], SECTORS, pixel=PIXEL) for c in letters}
     widths = {c: hmtx[cmap[ord(c)]][0] for c in letters}
     existing = {}
+
+    # How close the two letters ever come, which is the one reading that ranks ов the
+    # way a reader does: two letters read as detached when their ink never approaches,
+    # whatever the blurred page says about the light around it. It makes a poor thing
+    # to even out — pairs like ал are tight for a reason — but a good pair of limits.
+    ys = np.arange(*BAND, 5)
+    sides = {}
+    for char in letters:
+        right, left = scan(font, cmap[ord(char)], ys)
+        sides[char] = (hmtx[cmap[ord(char)]][0] - right, left)
+
+    def approach(a, b):
+        gap = sides[a][0] + sides[b][1] + existing.setdefault((a, b), kern(a, b))
+        seen = gap[~np.isnan(gap)]
+        return float(seen.min()) if len(seen) else None
 
     def measure(deltas):
         """Every gap in the corpus: which pair it is, and how wide its light runs."""
@@ -109,8 +121,23 @@ def evener(font, data, words):
         if score(seen) < best[0]:
             best = (score(seen), dict(deltas))
 
-    values = {pair: int(round(value / STEP) * STEP) for pair, value in best[1].items()}
-    values.update(HAND)
+    nearest = {pair: approach(*pair) for pair in existing}
+    seen = [v for v in nearest.values() if v is not None]
+    ceiling, middling, floor = (np.percentile(seen, CLOSEST), np.median(seen), np.percentile(seen, 2))
+
+    values = {}
+    for pair, value in best[1].items():
+        room = nearest.get(pair)
+        if room is not None:
+            # A round letter meeting a recessed stem never lets the blurred line go
+            # light between the two, so the optimiser reads it as tight and pulls it
+            # apart — ов, ор and ар all came out wrong that way. Nothing that already
+            # stands further apart than most at its closest may be opened any further.
+            if room >= middling:
+                value = min(value, 0.0)
+            value = min(value, ceiling - room)
+            value = max(value, floor - room)
+        values[pair] = int(round(value / STEP) * STEP)
     return {pair: value for pair, value in values.items() if value}, start, best[0]
 
 
