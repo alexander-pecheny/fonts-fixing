@@ -100,14 +100,20 @@ On the test document the spread falls from 0.24 to 0.14 with the median pair unm
 and the result beats Literata on all three readings at once. Only pairs the corpus
 contains are touched, so this is a font tuned to a text rather than a font in general.
 
-Three pairs are set by eye rather than measured. A round letter meeting a recessed
-stem — ор, ар, ов — never lets the blurred line go light between the two, so the
-optimiser reads them as too tight and pulls them apart, which is exactly backwards.
-They are in a table at the top of the script. Fixing that properly means measuring
-where the two letters actually face each other, and the attempts at that are in
-`scratchpad/`: reading band by band and dropping the bands only one letter occupies
-does fix To, whose arm otherwise fills the gap, but taking the widest band lets one
-open band speak for the whole pair and the words clump again.
+One blind spot needed a rule rather than a better reading of the light. A round
+letter meeting a recessed stem — ор, ар, ов — never lets the blurred line go light
+between the two at all, so the optimiser reads the gap as tight and pulls the pair
+further apart, which is exactly backwards. What ranks those pairs correctly is the
+plainest measurement available: how close the two letters ever come. It makes a poor
+thing to even out on its own, since pairs like ал are tight for a reason and it opens
+them, but it makes a good set of limits. Nothing that already stands further apart
+than most at its closest may be opened any further, nothing may stay further apart
+than the loosest sixth, and nothing may come nearer than the font's own tightest fit.
+
+Those limits overrule the objective on about a sixth of the pairs and the page score
+pays for it: the spread of widths lands at 0.25, against 0.19 for a version with the
+same three pairs corrected by hand. That is what not correcting by eye costs, and it
+buys a font that needs no such table.
 
 ## Math in Literata
 
