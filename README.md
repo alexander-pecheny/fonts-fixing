@@ -43,6 +43,28 @@ uv run proof.py "Roboto Flex Fix" some/older-version.ttf --size 100
 `proof.py` takes installed family names and/or .ttf paths and renders them as rows of one
 image, so before/after versions of the same font can sit side by side.
 
+## Math in Literata
+
+A math font is one file that carries a MATH table, every symbol, and the letters that
+formulas set variables in. Literata has the letters and nothing else, so `unicode-math`
+falls back to whatever math font the document names and formulas stop looking like the
+text around them. `build_literata_math.py` keeps STIX Two Math — table, symbols, glyph
+variants, stretchy assemblies — and redraws every letter and digit the two fonts share.
+
+- STIX is drawn 7% smaller than Literata, so the donor is scaled to bring the x-heights
+  together before anything is swapped in. `fontTools`' `scale_upem` covers most of that,
+  but it only knows MATH's value records: the operator thresholds, connector overlaps and
+  assembly part lengths are plain design units and need scaling by hand.
+- Italic corrections are remeasured rather than inherited. Literata's italic leans much
+  less than STIX's yet overshoots further on letters like `f`, so the donor's numbers
+  describe shapes that are no longer there — as does its per-glyph script kerning, which
+  is dropped for redrawn letters.
+- Accent attachment points are recentred for the same reason: STIX places them right of
+  centre by as much as its italics lean, which hangs a `\vec` arrow off the letter's side.
+- STIX draws a second, sturdier set of letters for script size and reaches them through
+  `ssty`. Literata says that with its optical size axis, so those variants come from an
+  opsz 7 instance instead of a shrunken one.
+
 ## Fonts built here
 
 Built copies live in `fonts/`; install with `cp -r fonts/GeistFix ~/Library/Fonts/`.
@@ -55,10 +77,12 @@ Built copies live in `fonts/`; install with `cp -r fonts/GeistFix ~/Library/Font
 | `build_roboto_flex_fix.py` → Roboto Flex Fix | No Cyrillic acute anchors, and typst ignores variable axes so every weight rendered as Regular. Emits static Regular/Italic/Bold/Bold Italic. |
 | `build_sofia_sans_ru.py` → Sofia Sans Ru | Sofia Sans ships Bulgarian letterforms as the default; this variant makes the Russian ones default and keeps the Bulgarian set on ss01. Also adds acute anchors on Cyrillic vowels. |
 | `pliant-kerning/batch.py` → Pliant | Almost no Cyrillic kerning. Also promotes the double-storey `a` to the default, which is a taste call rather than a fix. |
+| `build_literata_math.py` → Literata Math | Literata has no MATH table. Puts its letters, digits, Greek and Cyrillic into STIX Two Math, scaled to Literata's x-height. |
 
-All six upstreams are under the SIL Open Font License, which the patched copies inherit.
+All seven upstreams are under the SIL Open Font License, which the patched copies inherit.
 `OFL.txt` ships next to the fonts that came with one; [Geist](https://github.com/vercel/geist-font),
-[Inter](https://github.com/rsms/inter) and [Roboto Flex](https://github.com/googlefonts/roboto-flex)
+[Inter](https://github.com/rsms/inter), [Roboto Flex](https://github.com/googlefonts/roboto-flex),
+[Literata](https://github.com/googlefonts/literata) and [STIX Two](https://github.com/stipub/stixfonts)
 keep theirs upstream.
 
 The Sofia and Pliant scripts are kept as they were run rather than refactored onto
