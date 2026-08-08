@@ -88,16 +88,26 @@ dimensions: a pair is the sum of two shifted column profiles.
 
 The blur radius decides the answer rather than refining it. Wide, and two stems read as
 tight because their ink bleeds across the gap; narrow, and the same pair reads as loose.
-So it is swept rather than chosen, for the radius at which evening out the Latin disturbs
-the designer's own Latin kerning least — about 0.15 of the x-height here. Latin is
-adjusted alongside the Cyrillic, because evening out one script and not the other only
-moves the unevenness somewhere else.
+It cannot be fitted, which took a while to admit. Sweeping for the radius that disturbs
+the designer's own Latin kerning least rewards a model that proposes nothing and bottoms
+out at the smallest radius offered; sweeping for the radius that makes the designer's
+Latin read most uniformly rewards blurring the page to mush and runs to the largest.
+Neither has an interior minimum. So the radius is an assumption about a reader, the sweep
+picks its cautious end, and this build moves little. It is still swept per face, which
+stops the Bold inheriting the Regular's figure and pulling отб together twice as hard as
+its own weight asks for.
 
-Even at its best radius the model still disagrees with the designer by some 16 units on
-the average Latin pair, which is the honest measure of what is being overruled. ОС opens
-by 40 and Ч|Р closes by 20, which is the point; nn closes by 40, which is the cost. At
-text size the paragraphs are hard to tell apart, and in letterspaced capitals the
-difference is obvious.
+Two guards matter more than the radius. Nothing may end up with less clearance than the
+tightest fit the font already uses anywhere, or the model will happily push letters until
+they touch — ал collided that way, a pair Literata had deliberately opened by 10 units.
+And Latin moves with the Cyrillic, since evening out one script and not the other only
+relocates the unevenness.
+
+What no version of this managed is the round pairs. Every measure tried — power means over
+the scanline gaps, blurred troughs at seven radii, per-side white areas, and the two in
+sequence — wants оо and ОС opened by 45 to 85 units, against both Literata's designer and
+all five reference faces measured. A single number for "evenly spaced" keeps disagreeing
+with the people who do this by hand, by 13 units per pair at its closest.
 
 ## Math in Literata
 
