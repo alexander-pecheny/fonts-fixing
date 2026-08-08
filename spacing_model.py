@@ -42,6 +42,16 @@ def _side_features(profile, ink_rows):
     if not len(own):
         own = np.full(2, DEPTH)
 
+    # After TypeFacet's intrusion tolerance: how far in can a line be drawn before more
+    # than a given area of ink pokes past it? A serif intrudes on a corridor a stem never
+    # would, and reading the side at several tolerances tells the two apart.
+    intrusion = []
+    for allowed in (0.002, 0.006, 0.015, 0.04):
+        depths = np.linspace(own.min(), own.min() + 0.5, 60)
+        poked = [(np.maximum(depth - own, 0).mean() * (own.max() - own.min() + 1e-6)) for depth in depths]
+        beyond = [d for d, area in zip(depths, poked) if area <= allowed]
+        intrusion.append(max(beyond) if beyond else own.min())
+
     across = _profile(own, OWN)
     slope = np.diff(across)  # a diagonal side slopes steadily; a stem does not
     thirds = [part.mean() for part in np.array_split(own, 3)]
@@ -61,6 +71,7 @@ def _side_features(profile, ink_rows):
             float(np.abs(slope).mean()), float(slope.mean()),
             float(np.sum((own[1:-1] < own[:-2]) & (own[1:-1] < own[2:]))),  # notches, ie serifs
         ],
+        intrusion,
     ])
 
 
@@ -142,6 +153,55 @@ def extract(path, font_number=0):
                 ]),
             })
     return rows
+
+
+def care(path, font_number=0):
+    """Signs of how much attention a face's spacing was given, rather than how good it is.
+
+    A font that kerns three hundred Latin pairs and not one Cyrillic pair has said which
+    script it reviewed. And sidebearings snapped to multiples of ten are a default being
+    accepted rather than a judgement being made — a designer who looked leaves odd
+    numbers behind. Neither proves anything on its own; both are worth weighting by.
+    """
+    import uharfbuzz as hb
+
+    font = TTFont(path, fontNumber=font_number, lazy=True)
+    scale = 1000 / font["head"].unitsPerEm
+    cmap, hmtx = font.getBestCmap(), font["hmtx"]
+    with open(path, "rb") as handle:
+        face = hb.Face(handle.read(), font_number)
+    shaper = hb.Font(face)
+
+    def kerned(alphabet):
+        # the letters that actually attract kerning, or every font looks unkerned: nobody
+        # kerns b against d, and sampling a to n was measuring nothing at all
+        letters = [c for c in alphabet if ord(c) in cmap]
+        if len(letters) < 10:
+            return None
+        letters = letters[:14]
+        seen = 0
+        for a in letters:
+            for b in letters:
+                buf = hb.Buffer()
+                buf.add_str(a + b)
+                buf.guess_segment_properties()
+                hb.shape(shaper, buf, {"kern": True})
+                on = sum(g.x_advance for g in buf.glyph_positions)
+                buf = hb.Buffer()
+                buf.add_str(a + b)
+                buf.guess_segment_properties()
+                hb.shape(shaper, buf, {"kern": False})
+                if on != sum(g.x_advance for g in buf.glyph_positions):
+                    seen += 1
+        return seen / 196
+
+    bearings = [hmtx[cmap[ord(c)]][1] * scale for c in LETTERS if ord(c) in cmap]
+    rounded = np.mean([abs(v - round(v / 10) * 10) < 1 for v in bearings]) if bearings else 1.0
+    return {
+        "latin kerning": kerned("AVWYTLPFvwyafrToe") or 0.0,
+        "cyrillic kerning": kerned("АУФГТЬЪЯавгуфтяъь"),
+        "round numbers": float(rounded),
+    }
 
 
 def centred(rows):

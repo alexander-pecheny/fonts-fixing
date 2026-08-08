@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["fonttools", "numpy", "scikit-learn", "joblib"]
+# dependencies = ["fonttools", "numpy", "scikit-learn", "joblib", "uharfbuzz"]
 # ///
 """Train the sidebearing model on the fonts macOS ships, and report what it is worth.
 
@@ -25,7 +25,7 @@ from fontTools.ttLib import TTCollection
 from sklearn.ensemble import HistGradientBoostingRegressor
 from sklearn.model_selection import GroupKFold
 
-from spacing_model import OWN, SAMPLES, centred, extract
+from spacing_model import OWN, SAMPLES, care, centred, extract
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOTS = ("/System/Library/Fonts", "/System/Library/Fonts/Supplemental")
@@ -65,11 +65,18 @@ def harvest():
             continue
         if any(word in found[0]["family"].lower() for word in NOT_TEXT):
             continue
+        attention = care(path, index)
         targets, _ = centred(found)
         for row, target in zip(found, targets):
             row["centred"] = target
+            row["kerned"] = attention["latin kerning"]
+            row["rounded"] = attention["round numbers"]
         rows += found
     return rows
+
+
+# Faces whose spacing no one doubts, kept out of every fit so the regimes can be compared
+TRUSTED = ("palatino", "baskerville", "hoefler", "charter", "optima", "georgia", "times")
 
 
 def main():
@@ -82,15 +89,19 @@ def main():
     if os.path.exists(CACHE) and not args.reharvest:
         held = np.load(CACHE, allow_pickle=True)
         X, y, groups, scales = held["X"], held["y"], held["groups"], held["scales"]
+        kerned, rounded = held["kerned"], held["rounded"]
     else:
         rows = harvest()
         X = np.array([row["features"] for row in rows])
         y = np.array([row["centred"] for row in rows])
         groups = np.array([row["family"] for row in rows])
         scales = np.array([row["xheight"] for row in rows])
+        kerned = np.array([row["kerned"] for row in rows])
+        rounded = np.array([row["rounded"] for row in rows])
         os.makedirs(os.path.dirname(CACHE), exist_ok=True)
-        np.savez_compressed(CACHE, X=X, y=y, groups=groups, scales=scales)
-    print(f"{len(rows)} sides, {len(set(groups))} families, {X.shape[1]} features")
+        np.savez_compressed(CACHE, X=X, y=y, groups=groups, scales=scales,
+                            kerned=kerned, rounded=rounded)
+    print(f"{len(y)} sides, {len(set(groups))} families, {X.shape[1]} features")
     print(f"null error {np.abs(y * scales).mean():.1f} units at 1000 upem")
 
     build = lambda: HistGradientBoostingRegressor(
@@ -105,9 +116,40 @@ def main():
             errors.append(np.abs((y[test] - predicted) * scales[test]))
         print(f"  {label:34s} {np.concatenate(errors).mean():5.1f} units")
 
-    print("held out families, never seen in training:")
+    # Which fonts to learn from: a face that kerns nothing and rounds every sidebearing
+    # to ten has not been spaced so much as defaulted, and teaching on it teaches that.
+    trusted = np.array([any(word in str(f).lower() for word in TRUSTED) for f in groups])
+    print(f"\nheld out for judging: {sorted(set(groups[trusted]))}")
+
+    def regime(mask, label, rounds=1, match=None):
+        keep = mask & ~trusted
+        if match is not None:  # a fair comparison needs the same amount of data, not just
+            spare = np.flatnonzero(keep)  # the same fonts minus the ones we distrust
+            drop = np.random.default_rng(0).choice(spare, max(len(spare) - match, 0), replace=False)
+            keep = keep.copy()
+            keep[drop] = False
+        weights = np.ones(keep.sum())
+        for _ in range(rounds):
+            model = build().fit(X[keep], y[keep], sample_weight=weights)
+            if rounds > 1:  # let the consensus vote the odd font out
+                residual = np.abs(y[keep] - model.predict(X[keep]))
+                for family in set(groups[keep]):
+                    rows = groups[keep] == family
+                    weights[rows] = 1.0 / (1.0 + (residual[rows].mean() / np.median(residual)) ** 2)
+        error = np.abs((y[trusted] - model.predict(X[trusted])) * scales[trusted]).mean()
+        print(f"  {label:38s} {error:5.1f} units on the trusted faces, {keep.sum():6d} sides")
+
     everything = np.arange(X.shape[1])
+    print("held out families, never seen in training:")
     score(everything, "everything")
+    print("\nwhat to train on, judged on faces no one doubts:")
+    regime(np.ones(len(y), bool), "every font")
+    regime(rounded < 0.35, "dropping the ones that round to ten")
+    regime(kerned > 0.02, "dropping the ones that barely kern")
+    regime((rounded < 0.35) & (kerned > 0.02), "dropping both")
+    regime(np.ones(len(y), bool), "every font, consensus reweighted", rounds=3)
+    regime(np.ones(len(y), bool), "every font, cut to the same size", match=int((rounded < 0.35).sum() * 0.94))
+    regime(np.ones(len(y), bool), "every font, cut to the smaller size", match=int((kerned > 0.02).sum() * 0.94))
     if args.ablate:
         # the layout of a row, in the order spacing_model builds it
         band, own, slope = SAMPLES, SAMPLES + OWN, SAMPLES + OWN + OWN - 1
