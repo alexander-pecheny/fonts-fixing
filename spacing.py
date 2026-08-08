@@ -16,6 +16,8 @@ from fontTools.ttLib.tables import otTables as ot
 STEP = 20  # units between scanlines
 FLOOR = 20.0  # a channel never reads tighter than this, whatever the outlines do
 SOFTNESS = -2  # power-mean exponent: the more negative, the more the narrowest part counts
+BAND = (-220, 760)  # vertical range a pair is read over, descenders included
+PIXEL = 5  # units per column when a glyph is rasterised
 
 
 class FlattenPen(BasePen):
@@ -81,6 +83,56 @@ def scan(font, glyph_name, ys):
         if crossings:
             right[i], left[i] = max(crossings), min(crossings)
     return right, left
+
+
+def ink_columns(font, glyph_name, band=BAND, pixel=PIXEL):
+    """Ink area per column of the glyph, laid out from its origin."""
+    glyphs = font.getGlyphSet()
+    record = DecomposingRecordingPen(glyphs)
+    glyphs[glyph_name].draw(record)
+    pen = FlattenPen(glyphs)
+    record.replay(pen)
+    pen._closePath()
+
+    advance = font["hmtx"][glyph_name][0]
+    columns = np.zeros(int(advance / pixel) + 4)
+    for y in np.arange(*band, pixel):
+        crossings = []
+        for polygon in (p for p in pen.polygons if len(p) > 2):
+            points = polygon + [polygon[0]]
+            for (x0, y0), (x1, y1) in zip(points, points[1:]):
+                if (y0 <= y < y1) or (y1 <= y < y0):
+                    crossings.append((x0 + (x1 - x0) * (y - y0) / (y1 - y0), 1 if y1 > y0 else -1))
+        crossings.sort()
+        winding = 0
+        for (start, direction), (end, _) in zip(crossings, crossings[1:]):
+            winding += direction  # nonzero winding, so overlapping contours still fill
+            if winding:
+                columns[max(int(start / pixel), 0) : max(int(end / pixel), 0)] += 1
+    return columns, advance
+
+
+def gaussian(sigma, pixel=PIXEL):
+    x = np.arange(-int(3 * sigma / pixel), int(3 * sigma / pixel) + 1) * pixel
+    kernel = np.exp(-0.5 * (x / sigma) ** 2)
+    return kernel / kernel.sum()
+
+
+def trough(left, right, kern, kernel, pixel=PIXEL):
+    """How much ink the lightest column between two letters is seen to carry.
+
+    Blurring an image and adding up its columns is the same as adding up the columns
+    and blurring that, so a glyph never needs rasterising in two dimensions.
+    """
+    (columns_a, advance, first_a, last_a), (columns_b, _, first_b, last_b) = left, right
+    offset = int(round((advance + kern) / pixel))
+    both = np.zeros(max(len(columns_a), offset + len(columns_b)) + len(kernel))
+    both[: len(columns_a)] += columns_a
+    both[offset : offset + len(columns_b)] += columns_b
+    seen = np.convolve(both, kernel, mode="same")
+
+    lo, hi = sorted((last_a, offset + first_b))
+    return seen[lo : hi + 1].min()
 
 
 def kerner(data):

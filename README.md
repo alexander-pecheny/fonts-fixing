@@ -77,6 +77,28 @@ What this does not do is close the gaps that a reader notices in a word like О�
 there is spaced exactly as H|B is, and о|в as o|i: it is the font's own rhythm, and the
 Latin inherits it too. Tightening those is a taste call about the typeface, not a repair.
 
+## Making every pair read alike
+
+`build_literata_uniform.py` is that taste call, made deliberately. A reader does not
+measure the gap between two letters, they see how light the page goes between them, so
+each pair is rasterised, blurred the way an eye blurs a page at text size, and read at
+its lightest column. The kern that brings every pair to one common reading is what ships.
+Blurring commutes with summing down the columns, so this never needs a glyph in two
+dimensions: a pair is the sum of two shifted column profiles.
+
+The blur radius decides the answer rather than refining it. Wide, and two stems read as
+tight because their ink bleeds across the gap; narrow, and the same pair reads as loose.
+So it is swept rather than chosen, for the radius at which evening out the Latin disturbs
+the designer's own Latin kerning least — about 0.15 of the x-height here. Latin is
+adjusted alongside the Cyrillic, because evening out one script and not the other only
+moves the unevenness somewhere else.
+
+Even at its best radius the model still disagrees with the designer by some 16 units on
+the average Latin pair, which is the honest measure of what is being overruled. ОС opens
+by 40 and Ч|Р closes by 20, which is the point; nn closes by 40, which is the cost. At
+text size the paragraphs are hard to tell apart, and in letterspaced capitals the
+difference is obvious.
+
 ## Math in Literata
 
 A math font is one file that carries a MATH table, every symbol, and the letters that
@@ -112,6 +134,7 @@ Built copies live in `fonts/`; install with `cp -r fonts/GeistFix ~/Library/Font
 | `build_sofia_sans_ru.py` → Sofia Sans Ru | Sofia Sans ships Bulgarian letterforms as the default; this variant makes the Russian ones default and keeps the Bulgarian set on ss01. Also adds acute anchors on Cyrillic vowels. |
 | `pliant-kerning/batch.py` → Pliant | Almost no Cyrillic kerning. Also promotes the double-storey `a` to the default, which is a taste call rather than a fix. |
 | `build_literata_fix.py` → Literata Fix | Cyrillic reuses the Latin outlines but not the Latin kerning, so РО keeps a gap PO does not. Matches each Cyrillic side to the Latin shape it is drawn from and carries the kerning over; both variable fonts and all four statics. |
+| `build_literata_uniform.py` → Literata Uniform | Kerns every letter pair, Latin and Cyrillic, so that all of them read equally light under a blur fitted to the font's own Latin. Overrules the designer by design; see the section above. |
 | `build_literata_math.py` → Literata Math | Literata has no MATH table. Puts its letters, digits, Greek and Cyrillic into STIX Two Math, scaled to Literata's x-height. |
 
 All seven upstreams are under the SIL Open Font License, which the patched copies inherit.
