@@ -23,6 +23,10 @@ so the result matches its precomposed `Á`/`á`. Two refinements matter in pract
   font, so its build passes `point_at_center=False`.
 - Ё and ё get the acute raised by however far their dots clear plain Е, so it stacks above the
   diaeresis instead of landing in it.
+- A font that draws a second, flatter acute for capitals usually reaches for it only inside
+  its own precomposed Á, leaving a typed mark to sit as high above a capital as above a
+  lowercase letter. `case_acute_after_capitals` adds the `ccmp` rule that swaps it in after
+  any capital, which every shaper runs.
 
 `recenter_acute` handles the opposite case, where an anchor exists but sits somewhere
 Russian does not want it: Geist hangs the mark over ы's right stroke rather than the middle.
@@ -42,6 +46,21 @@ uv run proof.py "Roboto Flex Fix" some/older-version.ttf --size 100
 
 `proof.py` takes installed family names and/or .ttf paths and renders them as rows of one
 image, so before/after versions of the same font can sit side by side.
+
+## Spectral
+
+Spectral needs both halves of the above. It anchors every lowercase vowel but ё and leaves
+Ё Ы Э Ю Я out, and it draws `acutecomb.case` for the capitals it does anchor without ever
+selecting it, so А́ came out 45 units higher than the font's own Á. With the anchors added
+and the `ccmp` rule in, Cyrillic capitals whose Latin twin has a precomposed form — А О Е —
+carry the mark at exactly the offset the twin's composite uses.
+
+Version 2.005 also swapped Spectral's comma-shaped quotes for wedges
+([issue 28](https://github.com/productiontype/Spectral/issues/28)). The 2.001 outlines drop
+straight back in: the advance widths never changed, and “ ” ‚ „ ʻ ʼ and the small-cap forms
+are all composites of ‘ and ’. `build_spectral_fix.py` fetches both versions from the Google
+Fonts repository and swaps those two glyphs, dropping their hinting, which was written
+against another font's control values.
 
 ## Cyrillic spacing
 

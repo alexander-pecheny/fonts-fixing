@@ -6,9 +6,12 @@ missing anchors, reusing the font's own Latin anchor heights so the result
 matches its precomposed Á/á exactly.
 """
 
+import unicodedata
+
 from fontTools.otlLib import builder as ob
 from fontTools.pens.boundsPen import BoundsPen
 from fontTools.pens.recordingPen import DecomposingRecordingPen
+from fontTools.ttLib.tables import otTables as ot
 
 ACUTE = 0x0301
 UPPER = [0x0410, 0x0415, 0x0401, 0x0418, 0x041E, 0x0423, 0x042B, 0x042D, 0x042E, 0x042F]
@@ -150,6 +153,43 @@ def find_mark_bases(font, mark_glyph):
     return found
 
 
+def case_acute_after_capitals(font, case_mark):
+    """Swap the combining acute for the font's case-height one after a capital.
+
+    A font that draws a flatter acute for capitals often uses it only inside its
+    precomposed Á, leaving a typed U+0301 to sit as far above a capital as it
+    would above a lowercase letter. This adds the missing rule to `ccmp`, which
+    every shaper runs. Returns the capitals it fires after.
+    """
+    cmap = font.getBestCmap()
+    mark = cmap[ACUTE]
+    anchored = {g for sub in find_mark_bases(font, mark) for g in sub.BaseCoverage.glyphs}
+    capitals = sorted(
+        anchored & {g for cp, g in cmap.items() if unicodedata.category(chr(cp)) == "Lu"}
+    )
+    gmap = font.getReverseGlyphMap()
+    st = ot.ChainContextSubst()
+    st.Format = 3
+    st.BacktrackGlyphCount, st.BacktrackCoverage = 1, [ob.buildCoverage(capitals, gmap)]
+    st.InputGlyphCount, st.InputCoverage = 1, [ob.buildCoverage([mark], gmap)]
+    st.LookAheadGlyphCount, st.LookAheadCoverage = 0, []
+    st.SubstCount, st.SubstLookupRecord = 1, [ot.SubstLookupRecord()]
+    st.SubstLookupRecord[0].SequenceIndex = 0
+
+    lookups = font["GSUB"].table.LookupList
+    st.SubstLookupRecord[0].LookupListIndex = len(lookups.Lookup)
+    lookups.Lookup.append(
+        ob.buildLookup([ob.buildSingleSubstSubtable({mark: case_mark})], table="GSUB")
+    )
+    lookups.Lookup.append(ob.buildLookup([st], table="GSUB"))
+    lookups.LookupCount = len(lookups.Lookup)
+    for fr in font["GSUB"].table.FeatureList.FeatureRecord:
+        if fr.FeatureTag == "ccmp":
+            fr.Feature.LookupListIndex.append(len(lookups.Lookup) - 1)
+            fr.Feature.LookupCount = len(fr.Feature.LookupListIndex)
+    return capitals
+
+
 def recenter_acute(font, codepoints):
     """Move the font's own acute anchors onto the glyph's bounding-box center.
 
@@ -175,8 +215,14 @@ def recenter_acute(font, codepoints):
     return moved
 
 
-def add_acute_anchors(font, point_at_center=True, uppercase=UPPER, lowercase=LOWER, bowl=BOWL):
-    """Anchor U+0301 over the Cyrillic vowels the font left out. Returns added glyph names."""
+def add_acute_anchors(
+    font, point_at_center=True, uppercase=UPPER, lowercase=LOWER, bowl=BOWL, extra_marks=()
+):
+    """Anchor U+0301 over the Cyrillic vowels the font left out. Returns added glyph names.
+
+    `extra_marks` names other acutes — a case-height one, say — that the new
+    bases should carry too, each keeping the anchor the font gives it.
+    """
     cmap = font.getBestCmap()
     gs = font.getGlyphSet()
     mark = cmap[ACUTE]
@@ -227,6 +273,11 @@ def add_acute_anchors(font, point_at_center=True, uppercase=UPPER, lowercase=LOW
 
     mx = pointing_tip(gs, mark) if point_at_center else rec.MarkAnchor.XCoordinate
     marks = {mark: (cls, ob.buildAnchor(mx, rec.MarkAnchor.YCoordinate))}
+    for name in extra_marks:
+        other = st.MarkArray.MarkRecord[st.MarkCoverage.glyphs.index(name)]
+        if other.Class != cls:
+            raise SystemExit(f"{name} is in mark class {other.Class}, not {cls}")
+        marks[name] = (cls, ob.buildAnchor(other.MarkAnchor.XCoordinate, other.MarkAnchor.YCoordinate))
     lookup = ob.buildLookup(
         [ob.buildMarkBasePosSubtable(marks, bases, font.getReverseGlyphMap())],
         flags=0,
