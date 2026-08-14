@@ -53,7 +53,9 @@ Spectral needs both halves of the above. It anchors every lowercase vowel but ё
 Ё Ы Э Ю Я out, and it draws `acutecomb.case` for the capitals it does anchor without ever
 selecting it, so А́ came out 45 units higher than the font's own Á. With the anchors added
 and the `ccmp` rule in, Cyrillic capitals whose Latin twin has a precomposed form — А О Е —
-carry the mark at exactly the offset the twin's composite uses.
+carry the mark at exactly the offset the twin's composite uses. Spectral's own ю anchor is
+the one exception the build overrides: it sits halfway across the letter, on the crossbar,
+so `recenter_acute` moves it and Ю onto the bowl.
 
 Version 2.005 also swapped Spectral's comma-shaped quotes for wedges
 ([issue 28](https://github.com/productiontype/Spectral/issues/28)). The 2.001 outlines drop

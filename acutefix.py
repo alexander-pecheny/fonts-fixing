@@ -190,8 +190,8 @@ def case_acute_after_capitals(font, case_mark):
     return capitals
 
 
-def recenter_acute(font, codepoints):
-    """Move the font's own acute anchors onto the glyph's bounding-box center.
+def recenter_acute(font, codepoints, center=bbox_center):
+    """Move the font's own acute anchors onto `center` of the glyph.
 
     Geist hangs the mark over ы's right stroke; Russian sets it over the letter.
     """
@@ -203,7 +203,7 @@ def recenter_acute(font, codepoints):
     moved = []
     for cp in codepoints:
         g = cmap.get(cp)
-        x = bbox_center(gs, g) if g else None
+        x = center(gs, g) if g else None
         for sub in subtables if x is not None else []:
             if g not in sub.BaseCoverage.glyphs:
                 continue

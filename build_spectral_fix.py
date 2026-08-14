@@ -7,7 +7,8 @@ Spectral 2.005 anchors U+0301 over а е и о у and every lowercase vowel but 
 leaves Ё Ы Э Ю Я out, so a stress mark over those capitals lands past the letter.
 It also draws `acutecomb.case`, a flatter acute for capitals, and uses it inside
 its own Á — but nothing selects it for a typed combining acute, so even the
-capitals it does anchor carry the mark 45 units too high.
+capitals it does anchor carry the mark 45 units too high. Its ю anchor sits on
+the crossbar rather than the bowl, so ю and Ю are recentered.
 
 Version 2.005 also replaced the comma-shaped quotes with wedges
 (https://github.com/productiontype/Spectral/issues/28). The 2.001 outlines drop
@@ -25,7 +26,7 @@ import urllib.request
 from fontTools.ttLib import TTFont
 from fontTools.ttLib.tables import ttProgram
 
-from acutefix import add_acute_anchors, case_acute_after_capitals
+from acutefix import add_acute_anchors, bowl_center, case_acute_after_capitals, recenter_acute
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(HERE, "scratchpad", "spectral")
@@ -73,6 +74,7 @@ def main():
         font = TTFont(source(CURRENT, f"Spectral-{style}.ttf"))
         restore_curly_quotes(font, TTFont(source(CURLY, f"Spectral-{style}.ttf")))
         anchors = add_acute_anchors(font, point_at_center=False, extra_marks=["acutecomb.case"])
+        recenter_acute(font, [0x042E, 0x044E], bowl_center)
         capitals = case_acute_after_capitals(font, "acutecomb.case")
         rename(font)
         out = os.path.join(dst, f"SpectralFix-{style}.ttf")
