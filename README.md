@@ -57,12 +57,13 @@ carry the mark at exactly the offset the twin's composite uses. Spectral's own �
 the one exception the build overrides: it sits halfway across the letter, on the crossbar,
 so `recenter_acute` moves it and Ю onto the bowl.
 
-Version 2.005 also swapped Spectral's comma-shaped quotes for wedges
-([issue 28](https://github.com/productiontype/Spectral/issues/28)). The 2.001 outlines drop
-straight back in: the advance widths never changed, and “ ” ‚ „ ʻ ʼ and the small-cap forms
-are all composites of ‘ and ’. `build_spectral_fix.py` fetches both versions from the Google
-Fonts repository and swaps those two glyphs, dropping their hinting, which was written
-against another font's control values.
+Version 2.005 also swapped Spectral's comma and its comma-shaped quotes for wedges
+([issue 28](https://github.com/productiontype/Spectral/issues/28)). Six glyphs carry the
+shape — , ; ‘ ’ and the two combining comma accents — and “ ” ‚ „ ʻ ʼ, the comma-accent
+letters and the small-cap quotes are composites of those. The 2.001 outlines drop straight
+back in on advance widths that never changed. `build_spectral_fix.py` fetches both versions
+from the Google Fonts repository and swaps the six, dropping their hinting, which was
+written against another font's control values.
 
 ## Cyrillic spacing
 

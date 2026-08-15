@@ -10,10 +10,10 @@ its own Á — but nothing selects it for a typed combining acute, so even the
 capitals it does anchor carry the mark 45 units too high. Its ю anchor sits on
 the crossbar rather than the bowl, so ю and Ю are recentered.
 
-Version 2.005 also replaced the comma-shaped quotes with wedges
+Version 2.005 also replaced the comma and the comma-shaped quotes with wedges
 (https://github.com/productiontype/Spectral/issues/28). The 2.001 outlines drop
-straight back in: the advance widths are unchanged, and every other quote in the
-font — “ ” ‚ „ ʻ ʼ and the small-cap forms — is a composite of these two.
+straight back in: the advance widths are unchanged, and the rest of the family —
+“ ” ‚ „ ʻ ʼ, the comma-accent letters, the small-cap quotes — is composites.
 
     uv run build_spectral_fix.py
 """
@@ -32,7 +32,8 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(HERE, "scratchpad", "spectral")
 URL = "https://raw.githubusercontent.com/google/fonts/{ref}/ofl/spectral/{name}"
 CURRENT = "main"
-CURLY = "68de4ebfd9"  # v2.001, the last release whose quotes were still commas
+CURLY = "68de4ebfd9"  # v2.001, the last release drawn with commas rather than wedges
+CURLS = [0x2C, 0x3B, 0x312, 0x326, 0x2018, 0x2019]  # , ; ̒ ̦ ‘ ’
 WEIGHTS = ["ExtraLight", "Light", "Regular", "Medium", "SemiBold", "Bold", "ExtraBold"]
 STYLES = WEIGHTS + [w.replace("Regular", "") + "Italic" for w in WEIGHTS]
 
@@ -45,11 +46,19 @@ def source(ref, name):
     return path
 
 
-def restore_curly_quotes(font, donor):
-    """Take back the 2.001 quote outlines, minus their hinting."""
-    for name, was in (("quoteleft", "uni2018"), ("quoteright", "uni2019")):
+def restore_curls(font, donor):
+    """Take back the 2.001 outlines of every comma the font draws, minus their hinting.
+
+    The semicolon comes too, because it sets its comma 27 units to the left to
+    sit under the wedge's narrower waist.
+    """
+    ours, theirs = font.getBestCmap(), {g: cp for cp, g in donor.getBestCmap().items()}
+    for cp in CURLS:
+        name, was = ours[cp], donor.getBestCmap()[cp]
         glyph = copy.deepcopy(donor["glyf"][was])
         glyph.program = ttProgram.Program()
+        for component in glyph.components if glyph.isComposite() else []:
+            component.glyphName = ours[theirs[component.glyphName]]
         font["glyf"][name] = glyph
         font["hmtx"][name] = (font["hmtx"][name][0], donor["hmtx"][was][1])
 
@@ -72,7 +81,7 @@ def main():
     shutil.copy(source(CURRENT, "OFL.txt"), dst)
     for style in sorted(STYLES):
         font = TTFont(source(CURRENT, f"Spectral-{style}.ttf"))
-        restore_curly_quotes(font, TTFont(source(CURLY, f"Spectral-{style}.ttf")))
+        restore_curls(font, TTFont(source(CURLY, f"Spectral-{style}.ttf")))
         anchors = add_acute_anchors(font, point_at_center=False, extra_marks=["acutecomb.case"])
         recenter_acute(font, [0x042E, 0x044E], bowl_center)
         capitals = case_acute_after_capitals(font, "acutecomb.case")
