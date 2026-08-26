@@ -62,8 +62,12 @@ class FlattenPen(BasePen):
     _endPath = _closePath
 
 
-def scan(font, glyph_name, ys):
-    """Rightmost and leftmost ink at each y, nan where the glyph has none."""
+def runs(font, glyph_name, ys):
+    """The ink intervals at each scanline, by nonzero winding: [[(start, end), ...], ...].
+
+    What is between the extremes matters as much as where they are — a wire-thin serif
+    and a slab put their edge in the same place — so the interior crossings are kept.
+    """
     glyphs = font.getGlyphSet()
     record = DecomposingRecordingPen(glyphs)
     glyphs[glyph_name].draw(record)
@@ -71,16 +75,34 @@ def scan(font, glyph_name, ys):
     record.replay(pen)
     pen._closePath()
 
-    right, left = np.full(len(ys), np.nan), np.full(len(ys), np.nan)
-    for i, y in enumerate(ys):
+    out = []
+    for y in ys:
         crossings = []
         for polygon in (p for p in pen.polygons if len(p) > 2):
             points = polygon + [polygon[0]]
             for (x0, y0), (x1, y1) in zip(points, points[1:]):
                 if (y0 <= y < y1) or (y1 <= y < y0):
-                    crossings.append(x0 + (x1 - x0) * (y - y0) / (y1 - y0))
-        if crossings:
-            right[i], left[i] = max(crossings), min(crossings)
+                    crossings.append((x0 + (x1 - x0) * (y - y0) / (y1 - y0), 1 if y1 > y0 else -1))
+        crossings.sort()
+        winding, spans = 0, []
+        for (start, direction), (end, _) in zip(crossings, crossings[1:]):
+            winding += direction
+            if not winding or end <= start:
+                continue
+            if spans and start - spans[-1][1] < 0.5:  # overlapping contours split a run in two
+                spans[-1] = (spans[-1][0], end)
+            else:
+                spans.append((start, end))
+        out.append(spans)
+    return out
+
+
+def scan(font, glyph_name, ys):
+    """Rightmost and leftmost ink at each y, nan where the glyph has none."""
+    right, left = np.full(len(ys), np.nan), np.full(len(ys), np.nan)
+    for i, spans in enumerate(runs(font, glyph_name, ys)):
+        if spans:
+            right[i], left[i] = spans[-1][1], spans[0][0]
     return right, left
 
 

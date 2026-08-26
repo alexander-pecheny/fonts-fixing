@@ -144,15 +144,27 @@ sidebearing a function of the outline and so something that can be fitted. `spac
 turns each side of each letter into features — the profile of the side, where it stands
 back, how deep a corridor can be cut beside it before serifs poke through — and
 `train_spacing.py` fits them on the fonts macOS ships. Families are held out whole, so a
-sibling never flatters the score. It comes back within about 8 units at 1000 upem, against
-25 for knowing nothing. Which fonts to learn from matters as much as the features: `care()`
-reads a face's kerning coverage and how many of its sidebearings are multiples of ten, since
-a font that kerns nothing and rounds everything has been defaulted rather than spaced.
+sibling never flatters the score. It comes back within 9.5 units at 1000 upem on Latin and
+13.5 on Cyrillic, against 29 for knowing nothing. Which fonts to learn from matters as much
+as the features: `care()` reads a face's kerning coverage and how many of its sidebearings
+are multiples of ten, since a font that kerns nothing and rounds everything has been
+defaulted rather than spaced.
 
-The features read outlines, not codepoints, so a model trained on Latin can be asked about
-another script. On Jost it reproduces the designer's own Latin to 7 units and then proposes
-Cyrillic. Its verdict is mostly about д, which loses nearly all its sidebearing on both
-sides: the splayed feet already reach out, and Jost pays for that reach twice.
+Italics are sheared upright before anything is measured. Otherwise every reading of a
+slanted face carries the slant rather than the shape, and one italic-angle number cannot
+undo that across a hundred features. Shearing about the baseline leaves the advance alone,
+so a prediction still applies as a plain shift.
+
+The features read outlines, not codepoints, and each side carries only which script it
+belongs to, so the two are learned together without being averaged. Cyrillic costs Latin
+accuracy nothing and buys a unit on Cyrillic, and it is the only way the model ever sees a
+ж, whose arm overhangs in a way no Latin letter does.
+
+Google Fonts was tried as a corpus and rejected. It has 1,821 families against the 112 macOS
+ships, and adding it took the held-out error from 9.6 units to 10.6: the amateur majority
+drowns the careful minority, and filtering by `care()` made it worse again by cutting the
+data without concentrating it enough. The macOS set is small, curated, and none of it is a
+font this repository patches.
 
 ## Math in Literata
 
@@ -190,7 +202,7 @@ Built copies live in `fonts/`; install with `cp -r fonts/GeistFix ~/Library/Font
 | `pliant-kerning/batch.py` → Pliant | Almost no Cyrillic kerning. Also promotes the double-storey `a` to the default, which is a taste call rather than a fix. |
 | `build_literata_fix.py` → Literata Fix | Cyrillic reuses the Latin outlines but not the Latin kerning, so РО keeps a gap PO does not. Matches each Cyrillic side to the Latin shape it is drawn from and carries the kerning over; both variable fonts and all four statics. |
 | `build_literata_uniform.py` → Literata Uniform | Kerns the pairs a given document contains so the blurred page shows an even width of light between letters. Tuned to a text, and overrules the designer by design; see the section above. |
-| `build_jost_variants.py` → Jost Uniform, Jost Spaced | Jost kerns its Cyrillic about as much as its Latin, so these test the two methods rather than repair neglect. Uniform evens out the kerning of one line; Spaced takes the sidebearings the Latin-trained model reads off the Cyrillic outlines. `jost-sample.typ` sets the line all three ways. |
+| `build_jost_variants.py` → Jost Uniform, Jost Spaced | Jost kerns its Cyrillic about as much as its Latin, so these test the two methods rather than repair neglect. Uniform evens out the kerning of one line, in the Regular. Spaced gives every letter of both scripts the sidebearing the model reads off its outline, in all four styles. `jost-sample.typ` sets the line all three ways. |
 | `build_literata_math.py` → Literata Math | Literata has no MATH table. Puts its letters, digits, Greek and Cyrillic into STIX Two Math, scaled to Literata's x-height. |
 
 Every upstream here is under the SIL Open Font License, which the patched copies inherit.
