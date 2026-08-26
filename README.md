@@ -137,6 +137,23 @@ pays for it: the spread of widths lands at 0.25, against 0.19 for a version with
 same three pairs corrected by hand. That is what not correcting by eye costs, and it
 buys a font that needs no such table.
 
+## Spacing from the outline
+
+A designer separates two shapes until the white between them reads even, which makes a
+sidebearing a function of the outline and so something that can be fitted. `spacing_model.py`
+turns each side of each letter into features — the profile of the side, where it stands
+back, how deep a corridor can be cut beside it before serifs poke through — and
+`train_spacing.py` fits them on the fonts macOS ships. Families are held out whole, so a
+sibling never flatters the score. It comes back within about 8 units at 1000 upem, against
+25 for knowing nothing. Which fonts to learn from matters as much as the features: `care()`
+reads a face's kerning coverage and how many of its sidebearings are multiples of ten, since
+a font that kerns nothing and rounds everything has been defaulted rather than spaced.
+
+The features read outlines, not codepoints, so a model trained on Latin can be asked about
+another script. On Jost it reproduces the designer's own Latin to 7 units and then proposes
+Cyrillic. Its verdict is mostly about д, which loses nearly all its sidebearing on both
+sides: the splayed feet already reach out, and Jost pays for that reach twice.
+
 ## Math in Literata
 
 A math font is one file that carries a MATH table, every symbol, and the letters that
@@ -173,9 +190,10 @@ Built copies live in `fonts/`; install with `cp -r fonts/GeistFix ~/Library/Font
 | `pliant-kerning/batch.py` → Pliant | Almost no Cyrillic kerning. Also promotes the double-storey `a` to the default, which is a taste call rather than a fix. |
 | `build_literata_fix.py` → Literata Fix | Cyrillic reuses the Latin outlines but not the Latin kerning, so РО keeps a gap PO does not. Matches each Cyrillic side to the Latin shape it is drawn from and carries the kerning over; both variable fonts and all four statics. |
 | `build_literata_uniform.py` → Literata Uniform | Kerns the pairs a given document contains so the blurred page shows an even width of light between letters. Tuned to a text, and overrules the designer by design; see the section above. |
+| `build_jost_variants.py` → Jost Uniform, Jost Spaced | Jost kerns its Cyrillic about as much as its Latin, so these test the two methods rather than repair neglect. Uniform evens out the kerning of one line; Spaced takes the sidebearings the Latin-trained model reads off the Cyrillic outlines. `jost-sample.typ` sets the line all three ways. |
 | `build_literata_math.py` → Literata Math | Literata has no MATH table. Puts its letters, digits, Greek and Cyrillic into STIX Two Math, scaled to Literata's x-height. |
 
-All seven upstreams are under the SIL Open Font License, which the patched copies inherit.
+Every upstream here is under the SIL Open Font License, which the patched copies inherit.
 `OFL.txt` ships next to the fonts that came with one; [Geist](https://github.com/vercel/geist-font),
 [Inter](https://github.com/rsms/inter), [Roboto Flex](https://github.com/googlefonts/roboto-flex),
 [Literata](https://github.com/googlefonts/literata) and [STIX Two](https://github.com/stipub/stixfonts)

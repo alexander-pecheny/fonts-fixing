@@ -107,8 +107,12 @@ def _face_features(font, cmap, glyphs, scale, xheight):
     ]
 
 
-def extract(path, font_number=0):
-    """Every letter side of one font: its features, and the sidebearing it was given."""
+def extract(path, font_number=0, letters=LETTERS):
+    """Every letter side of one font: its features, and the sidebearing it was given.
+
+    The features read outlines, not codepoints, so a Latin-trained model can be asked
+    about another script by passing its letters here.
+    """
     font = TTFont(path, fontNumber=font_number, lazy=True)
     if "glyf" not in font and "CFF " not in font:
         return []
@@ -123,7 +127,7 @@ def extract(path, font_number=0):
 
     ys = np.linspace(BAND[0] * xheight, BAND[1] * xheight, int((BAND[1] - BAND[0]) * xheight / ROWS))
     rows = []
-    for char in LETTERS:
+    for char in letters:
         if ord(char) not in cmap:
             continue
         name = cmap[ord(char)]
