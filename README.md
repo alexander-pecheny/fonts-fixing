@@ -160,6 +160,59 @@ belongs to, so the two are learned together without being averaged. Cyrillic cos
 accuracy nothing and buys a unit on Cyrillic, and it is the only way the model ever sees a
 ж, whose arm overhangs in a way no Latin letter does.
 
+`respacing.py` is where a prediction becomes a font, and two things come off it first.
+How a face splits its space between the two sides of a letter is a convention like
+tracking: shift every glyph the same way inside its own advance and the page is
+unchanged. So the model's mean disagreement with the face's own Latin is subtracted per
+side. Geist's Italic reads +40 units on the left against −9 on the right, and left
+standing that bias comes out as a uniform widening, because the floor below is applied to
+each side on its own. What remains is the noise the model cannot see past, 7 to 11 units,
+which comes off as well; on that italic it was 26 units before the bias was removed and
+11 after, so the same subtraction that stops the widening also stops throwing away the
+real moves.
+
+Half of Geist's Cyrillic is drawn as composites of the Latin letters — а is a, Н is H —
+which the Jost work never had to deal with. Moving a base glyph drags everything built on
+it, so a composite takes its base's move rather than its own reading, which is also the
+only way а stays exactly where a is. Glyphs not being respaced at all, á and Ǎ, inherit
+their base's move, and mark anchors travel with the outline they were placed on.
+
+A model that reads one side at a time cannot see a pair, and that is what an eye catches
+first. Geist's у and д were each given more room, so уд — already looser than nine
+Cyrillic pairs in ten — opened by a further 23 units. `hold()` measures every pair's
+channel with the soft minimum from `spacing.py`, before and after, and gives back what
+compounded: nothing that already stood further apart than the median may end up further
+apart than the designer left it. A pair that was tight keeps what the model gave it, ту
+going from 131 units of channel to 169. Since it reads against the font as drawn rather
+than a target of its own it can only give back, never override, which is why it runs over
+the Latin as well. In Geist's Regular that is 306 Cyrillic pairs and 528 Latin at 20 units
+apiece, and it leaves the channel more even than either the font as drawn or the respaced
+one: 0.245 to 0.230 across the Cyrillic, 0.221 to 0.195 across the Latin. The exponent
+that measure needs, fitted on Geist's own Latin the way it was for Literata, comes out at
+−2, which is what `spacing.py` already uses.
+
+All of that measures the white between two letters, which is what a designer balances and
+not what catches the eye in a word. играм reads as clumped in Geist, and its four gaps
+measure within five units of each other as white: г and р stand 349 units apart for nine
+tenths of their height and 67 apart at the top, where г's arm reaches over, while иг keeps
+a plain 160 all the way up — and Geist kerns гр 40 units tighter still, to fill the void
+under the arm. `even()` reads the other thing, how close the two letters ever come. A pair
+pinched by an overhang is opened, one whose ink never approaches is pulled in, and both are
+held inside the band between the 25th and 70th percentile of the font's own approaches, by
+at most 60 units. Two round letters are exempt from the first rule: о meets о as closely as
+г meets р, but gradually, over a third of its height rather than at a single lid, and the
+eye reads that as a lens of white rather than a collision.
+
+This is the one pass here that overrules the designer rather than restoring him, and it
+repairs a real fault while it is at it. Geist as drawn brings 16 Cyrillic pairs within 30
+units of touching, гт and гх within 8; none now come nearer than 61. In the Regular it
+moves 2,870 pairs — уд from −24 to −104, гр from −40 to 0, Ту from −50 to −130, and in the
+Latin rp from −40 to −20 — and the spread of the approaches falls from 0.35 to 0.20 across
+the Cyrillic and 0.31 to 0.16 across the Latin. Nothing in it is particular to Geist: every
+threshold is a percentile of the font's own pairs and every limit is scaled by the em, so
+the same pass run over Literata, Spectral and IBM Plex Serif pulls each one's spread down
+by a third and lifts the overlapping pairs it finds in the first two back apart.
+
 Google Fonts was tried as a corpus and rejected. It has 1,821 families against the 112 macOS
 ships, and adding it took the held-out error from 9.6 units to 10.6: the amateur majority
 drowns the careful minority, and filtering by `care()` made it worse again by cutting the
@@ -194,7 +247,7 @@ Built copies live in `fonts/`; install with `cp -r fonts/GeistFix ~/Library/Font
 
 | Font | What the script changes |
 | --- | --- |
-| `build_geist_fix.py` → Geist Fix | Anchors U+0301 over every Cyrillic vowel, but registers `mark` only under `latn`, so none of it applied to Russian. Also moves ы off its right stroke. Patches all 18 static styles. |
+| `build_geist_fix.py` → Geist Fix | Anchors U+0301 over every Cyrillic vowel, but registers `mark` only under `latn`, so none of it applied to Russian. Also moves ы off its right stroke, respaces both scripts from the model, kerns back the pairs that opened and evens what remains. Patches all 18 static styles; `geist-sample.typ` sets a line before and after. |
 | `build_inter_fix.py` → Inter Fix | Same unregistered `cyrl` script as Geist, plus Ю and я were never anchored. Rewrites the whole 36-face collection, Inter and Inter Display alike. |
 | `build_ibm_plex_fix.py` → IBM Plex Sans Fix, IBM Plex Serif Fix | Ё, Э, Ю and Я are the vowels Plex never anchored; the rest of its Cyrillic already works. Both families, 16 styles each. |
 | `build_roboto_flex_fix.py` → Roboto Flex Fix | No Cyrillic acute anchors, and typst ignores variable axes so every weight rendered as Regular. Emits static Regular/Italic/Bold/Bold Italic. |
