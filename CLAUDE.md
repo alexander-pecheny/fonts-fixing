@@ -7,34 +7,33 @@ is gitignored and is where proofs, trial faces and one-off scripts go.
 ## Spacing and kerning a font
 
 `respacing.py` holds the pipeline, and `build_geist_fix.py` is the example of it run in
-full. Four passes, in this order, each fixing what the one before it cannot see:
+full. Two passes and two models, in this order:
 
 1. `respace(font, path, model)` — `spacing-model.joblib` predicts each sidebearing from
    the outline. Both scripts go together, since a font that draws а as a has spaced them
    alike on purpose. Two corrections come off every proposal first: the model's mean
    disagreement with the face's own Latin on each side, which is a convention rather than
    a judgement, and then the noise that remains, so only a move the model can tell apart
-   from its own error survives.
-2. `shift(font, moves)` — applies those moves. A composite drawn from one other glyph
-   takes that glyph's move; anything else built on a moved glyph follows it; anchors travel
-   with the outline, or the stress mark ends up off the letter.
-3. `hold(font, path)` — the model reads one side at a time and cannot see a pair, so two
-   letters each given more room can end up further apart than any pair on the page. Nothing
-   that already stood further apart than the median may end up further apart than the
-   designer left it. This only ever gives back, so it runs over the Latin too.
-4. `even(font, data)` — everything above measures the white between two letters; this
-   reads how close their ink ever comes, which is what the eye catches in a word. Pairs
-   pinched by an overhang are opened, pairs whose ink never approaches are pulled in, both
-   held inside the band the font's own pairs occupy. It needs the font's current bytes,
-   so serialise to a `BytesIO` after `hold` and pass that. This is the only pass that
-   overrules the designer.
+   from its own error survives. `shift(font, moves)` applies them: a composite drawn from
+   one other glyph takes that glyph's move; anything else built on a moved glyph follows
+   it; anchors travel with the outline, or the stress mark ends up off the letter.
+2. `fit(font, data, model)` — `pair-model.joblib` predicts how far apart each pair of
+   letters should stand, from the two facing profiles and the shape of the white between
+   them. This is what sees the cavity in кт and the overhang in гр, which no reading of a
+   single side can. It needs the font's current bytes, so serialise to a `BytesIO` after
+   `respace` and pass that. The face's own tracking comes off first; then the model's
+   held-out error, which travels in the joblib beside it — never the disagreement
+   measured on the font at hand, since on a badly spaced face that is the face being
+   wrong and shrinking by it leaves the fault in place.
 
-Nothing in any of it is particular to one font: thresholds are percentiles of the font's
-own pairs and limits are scaled by the em. Constants sit at the top of `respacing.py`.
+Nothing in either is particular to one font, and neither needs the font to have been
+spaced or kerned at all: the models supply every judgement and the only thing read off
+the face is its tracking, one number. Constants sit at the top of `respacing.py`.
 
 `spacing.py` holds the geometry — scanline profiles, the soft-minimum channel, the blurred
-page reading, `add_kern_lookup`. `spacing_model.py` extracts the features and `care()`;
-`train_spacing.py` fits the model on the fonts macOS ships.
+page reading, `add_kern_lookup`. `spacing_model.py` and `pair_model.py` extract the
+features; `train_spacing.py` and `train_pairs.py` fit the two models on the fonts macOS
+ships.
 
 ## What counts as done
 

@@ -1,27 +1,32 @@
-"""Give every letter the sidebearing `spacing-model.joblib` reads off its outline.
+"""Space a font by the two models: sidebearings from each outline, then kerning per pair.
 
-The model is asked about both scripts at once. A font that draws Cyrillic а as Latin a
-has spaced the two alike on purpose, and moving one script alone pulls such a pair apart
-for no reason anything measured on a side can see.
+`respace` asks `spacing-model.joblib` what sidebearing each letter's outline calls for.
+Both scripts are asked at once: a font that draws Cyrillic а as Latin a has spaced the
+two alike on purpose, and moving one script alone pulls such a pair apart for no reason
+anything measured on a side can see.
 
-Its error on the face's own Latin is subtracted from every proposal, so a move survives
-only if the model can tell it apart from its own noise. What is left is held to a floor:
-no pair may end up nearer than the font's own tightest fit, or than it already was.
+`fit` then asks `pair-model.joblib` how far apart each pair of letters should stand. A
+sidebearing is one side at a time, and the sum of two sides is not a pair: it cannot see
+the cavity between кт or the pinch under г's arm, which is what kerning is for.
+
+Both subtract the model's error on the face's own Latin before proposing anything, so a
+move survives only if the model can tell it apart from its own noise.
 """
 
+import io
+
 import numpy as np
-from fontTools.ttLib import TTFont
 from fontTools.ttLib.tables import otTables as ot
 
-from spacing import BAND, FLOOR, SOFTNESS, STEP, add_kern_lookup, kerner, scan
+import pair_model
+from spacing import BAND, add_kern_lookup, kerner, scan
 from spacing_model import CYRILLIC, LETTERS, centred, extract
 
 ROWS = 10  # units between the scanlines a pair is checked on
-NEAREST = 2  # percentile of the font's own approaches that nothing may go under
+NEAREST = 2  # percentile of the predicted approaches that nothing may end up under
 ROUNDS = 20
-PINCHED, GAPING = 25, 70  # percentiles of its own approaches the font is held between
-LID, NARROW = 1.3, 0.25  # a pinch this close over less than this much height is an overhang
-LIMIT = 60  # units a pair may be kerned by
+LIMIT = 100  # units a pair may be kerned by
+QUANTUM = 5  # units a kern is rounded to
 
 
 def clearances(font, kern, letters):
@@ -98,110 +103,62 @@ def _shift_anchors(font, dx):
                             anchor.XCoordinate += dx[name]
 
 
-def hold(font, path, scripts=(LETTERS, CYRILLIC + "Ёё")):
-    """Kern back the pairs respacing opened that were open to begin with.
+def fit(font, data, model, scripts=(LETTERS, CYRILLIC + "Ёё")):
+    """Kern every pair to the distance `pair-model.joblib` reads off the two shapes.
 
-    The model reads one side at a time, so it never sees that two letters it has each
-    given more room are now, together, further apart than almost any pair on the page.
-    Geist's у and д both moved out and уд, already looser than nine Cyrillic pairs in ten,
-    opened by another 23 units — which is what the eye catches first.
+    A sidebearing is one side at a time, and a pair is not the sum of two sides. Two
+    letters that each stand back leave a cavity between them — кт, са, ту — and neither
+    side can see it; a letter whose arm overhangs pinches a pair whose sidebearings look
+    generous — гр, rn, Ту. Both are what kerning is for, and both are a function of the
+    two facing shapes, so both can be learned: see `pair_model`.
 
-    So nothing that already stood further apart than the median may end up further apart
-    than the designer left it. A pair that was tight keeps whatever the model gave it:
-    ту opens from 131 units of channel to 169 and stays there. Measured against the font
-    as drawn rather than against a target of its own, this can only give back, never
-    override, which is why it runs over the Latin as well.
+    Two things come off every proposal, as in `respace`. First the model's mean
+    disagreement with this face's own Latin pairs, since how loose a font is set is one
+    decision for the whole face and not a fact about any pair. Then the model's own
+    error on faces it has never seen, 13 units, so a pair moves only if the model can
+    tell the move apart from its own noise. That figure is the model's and not this
+    font's: how far a particular face disagrees is partly the face being wrong, and
+    measuring it here would leave a badly spaced font badly spaced. Last, nothing may
+    end up closer at its nearest approach than the tightest pair the model itself asks
+    for anywhere in the font.
     """
+    read = pair_model.sides(io.BytesIO(data), letters="".join(scripts))
+    kern, letters, face = kerner(data), read["letters"], read["face"]
+    xheight, scale = read["xheight"], read["scale"]  # x-height and units at 1000 to the em
+
+    rows = []
+    for index, alphabet in enumerate(scripts):
+        have = [char for char in alphabet if char in letters]
+        for a in have:
+            for b in have:
+                first, second = letters[a], letters[b]
+                joint = first["right"] + second["left"]
+                rows.append((index, a, b,
+                             first["bearing"][0] + second["bearing"][1] + kern(a, b) * scale / xheight,
+                             float(np.nanmin(joint)) if not np.all(np.isnan(joint)) else 0.0,
+                             pair_model.features(first, second, face)))
+    if not rows:
+        return np.array([])
+
+    want = model["model"].predict(np.array([row[-1] for row in rows]))
+    have = np.array([row[3] for row in rows])
+    latin = np.array([not row[0] for row in rows])
+    bias = float((want - have)[latin].mean()) if latin.any() else float((want - have).mean())
+    noise = model["error"]
+
+    lowest = np.array([row[4] for row in rows])
+    floor = float(np.percentile(want - bias + lowest, NEAREST))  # the model's own tightest fit,
+    # rather than the font's: a face may already draw a pair that touches, and Geist does
+
     cmap, values = font.getBestCmap(), {}
-    was = TTFont(path)
-    kern = kerner(open(path, "rb").read())  # respacing leaves the kerning alone
-    scale = font["head"].unitsPerEm / 1000
-    ys = np.arange(-40 * scale, 760 * scale, STEP * scale)
-
-    def measure(source, letters):
-        metrics, sides = source["hmtx"], {}
-        for char in letters:
-            far, near = scan(source, cmap[ord(char)], ys)
-            sides[char] = (metrics[cmap[ord(char)]][0] - far, near)
-        return sides
-
-    for letters in scripts:
-        letters = [char for char in letters if ord(char) in cmap]
-        drawn, now = measure(was, letters), measure(font, letters)
-
-        def channel(sides, a, b, extra=0.0):
-            gap = sides[a][0] + sides[b][1] + kern(a, b) + extra
-            gap = gap[~np.isnan(gap)]
-            return float(np.mean(np.maximum(gap, FLOOR) ** SOFTNESS) ** (1 / SOFTNESS)) if len(gap) else None
-
-        before = {(a, b): channel(drawn, a, b) for a in letters for b in letters}
-        middling = np.median([width for width in before.values() if width])
-        for pair, width in before.items():
-            after = channel(now, *pair)
-            if width is None or after is None or width < middling or after <= width:
-                continue
-            back = width - after
-            for _ in range(2):  # the channel is a soft minimum, so not quite linear in the kern
-                back += width - channel(now, *pair, back)
-            value = int(round(back / (STEP * scale)) * STEP * scale)
-            if value:
-                values[cmap[ord(pair[0])], cmap[ord(pair[1])]] = value
-    add_kern_lookup(font, values)
-    return np.array(list(values.values()))
-
-
-def even(font, data, scripts=(LETTERS, CYRILLIC + "Ёё")):
-    """Kern until the ink of one pair comes as close as the ink of the next.
-
-    Everything above measures the white between two letters. That is what a designer
-    balances, but it is not what catches the eye in a word: играм reads as clumped
-    because г's arm is the only ink at its height, so г and р stand 349 units apart for
-    nine tenths of their height and 67 apart at the top — while иг, a plain pair of
-    stems, keeps its 160 all the way up. All four gaps in that word measure within five
-    units of each other as white, which is why nothing else here flagged them.
-
-    So this reads the other thing: how close the two letters ever come. A pair pinched
-    that way is opened, one whose ink never approaches is pulled in, and both are held
-    inside the band the font's own pairs occupy. Two round letters are exempt from the
-    first rule — о against о comes as close as г against р does, but gradually, over a
-    third of its height rather than at a single lid, and the eye reads that as a lens of
-    white rather than a collision.
-
-    This overrides the designer rather than restoring him, unlike everything above it.
-    It also repairs a real fault: Geist kerns гЭ tight enough that the two letters touch.
-    """
-    cmap, hmtx, values = font.getBestCmap(), font["hmtx"], {}
-    kern = kerner(data)
-    scale = font["head"].unitsPerEm / 1000  # every limit here is in units of 1000 to the em
-    ys = np.arange(BAND[0] * scale, BAND[1] * scale, ROWS * scale)
-
-    for letters in scripts:
-        letters = [char for char in letters if ord(char) in cmap]
-        sides = {}
-        for char in letters:
-            far, near = scan(font, cmap[ord(char)], ys)
-            sides[char] = (hmtx[cmap[ord(char)]][0] - far, near)
-        gaps = {}
-        for a in letters:
-            for b in letters:
-                gap = sides[a][0] + sides[b][1] + kern(a, b)
-                gap = gap[~np.isnan(gap)]
-                if len(gap):
-                    gaps[a, b] = gap
-
-        approach = np.array([gap.min() for gap in gaps.values()])
-        closer, wider = np.percentile(approach, PINCHED), np.percentile(approach, GAPING)
-        for (a, b), gap in gaps.items():
-            room = float(gap.min())
-            if room < closer and float((gap <= room * LID).mean()) < NARROW:
-                move = closer - room
-            elif room > wider:
-                move = wider - room
-            else:
-                continue
-            move = int(round(float(np.clip(move, -LIMIT * scale, LIMIT * scale)) / (STEP * scale)) * STEP * scale)
-            if move:
-                values[cmap[ord(a)], cmap[ord(b)]] = move
+    step, limit = QUANTUM / scale, LIMIT / scale
+    for (_, a, b, gap, nearest, _), target in zip(rows, want):
+        move = target - bias - gap
+        move = np.sign(move) * max(abs(move) - noise, 0)
+        move = max(move, floor - (gap + nearest))
+        move = int(round(float(np.clip(move * xheight / scale, -limit, limit)) / step) * step)
+        if move:
+            values[cmap[ord(a)], cmap[ord(b)]] = move
     add_kern_lookup(font, values)
     return np.array(list(values.values()))
 
