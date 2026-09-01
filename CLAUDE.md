@@ -7,7 +7,7 @@ is gitignored and is where proofs, trial faces and one-off scripts go.
 ## Spacing and kerning a font
 
 `respacing.py` holds the pipeline, and `build_geist_fix.py` is the example of it run in
-full. Two passes and two models, in this order:
+full. Three passes, in this order:
 
 1. `respace(font, path, model)` — `spacing-model.joblib` predicts each sidebearing from
    the outline. Both scripts go together, since a font that draws а as a has spaced them
@@ -25,10 +25,18 @@ full. Two passes and two models, in this order:
    held-out error, which travels in the joblib beside it — never the disagreement
    measured on the font at hand, since on a badly spaced face that is the face being
    wrong and shrinking by it leaves the fault in place.
+3. `tuck(font, data)` — a cap on the white a pair may hold, and the one rule that
+   overrules the model. Most of the Cyrillic in the corpus was added to a Latin face that
+   was already drawn, so it kerns To and leaves Гд open, and the model reproduces that.
+   A pair is a hole if it holds more than `CEILING` times the middle of the pairs that
+   share its band *and* its ink never comes as close as that middle pair does. Comparing
+   within the band is what keeps two capitals loose while a capital against a lowercase
+   letter is judged against lowercase; the second condition is what spares кт and гр.
+   Read the reasoning in the docstring before touching either.
 
-Nothing in either is particular to one font, and neither needs the font to have been
-spaced or kerned at all: the models supply every judgement and the only thing read off
-the face is its tracking, one number. Constants sit at the top of `respacing.py`.
+Nothing in any of it is particular to one font, and none of it needs the font to have
+been spaced or kerned at all: the models supply every judgement and the only thing read
+off the face is its tracking, one number. Constants sit at the top of `respacing.py`.
 
 `spacing.py` holds the geometry — scanline profiles, the soft-minimum channel, the blurred
 page reading, `add_kern_lookup`. `spacing_model.py` and `pair_model.py` extract the

@@ -78,6 +78,13 @@ def sides(path, font_number=0, letters=LETTERS):
     return {"letters": out, "face": face, "xheight": xheight, "scale": scale}
 
 
+def nearest(first, second):
+    """How close the two letters come once their two extremes touch, in x-heights."""
+    joint = np.minimum(first["right"], WIDE) + np.minimum(second["left"], WIDE)
+    seen = joint[~np.isnan(joint)]
+    return float(seen.min()) if len(seen) else WIDE
+
+
 def features(first, second, face):
     """One pair: the two facing profiles, and the shape of the white between them.
 
@@ -85,8 +92,8 @@ def features(first, second, face):
     with its spacing taken out — what is left is the shape of the cavity the two make,
     which is what the answer has to be a function of.
     """
-    right = np.minimum(np.nan_to_num(first["right"], nan=np.nan), WIDE)
-    left = np.minimum(np.nan_to_num(second["left"], nan=np.nan), WIDE)
+    right = np.minimum(first["right"], WIDE)
+    left = np.minimum(second["left"], WIDE)
     joint = right + left  # what the gap would be if their extremes touched
     seen = joint[~np.isnan(joint)]
     if not len(seen):
@@ -130,6 +137,7 @@ def extract(path, font_number=0, letters=LETTERS, kern=None, pairs=None):
             continue
         first, second = letters[a], letters[b]
         gap = first["bearing"][0] + second["bearing"][1] + kern(a, b) * read["scale"] / xheight
-        rows.append({"family": family, "pair": a + b, "xheight": xheight, "target": gap,
+        rows.append({"family": family, "pair": a + b, "xheight": xheight,
+                     "target": gap + nearest(first, second),
                      "features": features(first, second, face)})
     return rows

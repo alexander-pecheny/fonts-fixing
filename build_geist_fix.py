@@ -28,7 +28,7 @@ import numpy as np
 from fontTools.ttLib import TTFont
 
 from acutefix import enable_features, recenter_acute
-from respacing import fit, respace
+from respacing import fit, respace, tuck
 
 YERY = (0x042B, 0x044B)  # Ы ы — Geist anchors these over the right stroke
 
@@ -59,6 +59,9 @@ def main():
         current = io.BytesIO()
         font.save(current)  # the pair model has to read the respaced outlines
         kerns = fit(font, current.getvalue(), pairs)
+        current = io.BytesIO()
+        font.save(current)  # the cap reads the kerning the model has just asked for
+        capped = tuck(font, current.getvalue())
         moved = recenter_acute(font, YERY)
         rename(font)
         out = os.path.join(DST, os.path.basename(src).replace("Geist-", "GeistFix-"))
@@ -68,7 +71,8 @@ def main():
               f"{len(moves) // 2} letters, mean move {np.abs(moves).mean():.0f}, "
               f"{moves.min()}..{moves.max()}, noise {noise:.0f} subtracted, "
               f"floor held back {floored:.0f}; {len(kerns)} pairs kerned "
-              f"({(kerns > 0).sum()} opened), median |kern| {np.abs(kerns).mean():.0f}  {shifts}")
+              f"({(kerns > 0).sum()} opened), median |kern| {np.abs(kerns).mean():.0f}; "
+              f"{len(capped)} holes capped by {np.abs(capped).mean() if len(capped) else 0:.0f}  {shifts}")
 
 
 if __name__ == "__main__":

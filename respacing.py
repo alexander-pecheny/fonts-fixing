@@ -11,6 +11,10 @@ the cavity between кт or the pinch under г's arm, which is what kerning is fo
 
 Both subtract the model's error on the face's own Latin before proposing anything, so a
 move survives only if the model can tell it apart from its own noise.
+
+`tuck` is a third pass and a different kind of thing: a cap on the white a pair may hold
+against the pairs that share its band, which overrules the model where the corpus it was
+fitted on is not worth following.
 """
 
 import io
@@ -27,12 +31,16 @@ NEAREST = 2  # percentile of the predicted approaches that nothing may end up un
 ROUNDS = 20
 LIMIT = 100  # units a pair may be kerned by
 QUANTUM = 5  # units a kern is rounded to
+SHARED = 0.12  # of x-height: how near in shared height two pairs must be to be compared
+SPAN = 1.8  # x-heights the profiles are read over, so a shared fraction becomes a height
+CEILING = 1.55 # of the middle pair's white, the most a pair may hold before it is a hole
 
 
 def clearances(font, kern, letters):
     """How close each ordered pair of letters ever comes, kerning included."""
     cmap, hmtx = font.getBestCmap(), font["hmtx"]
-    ys = np.arange(*BAND, ROWS)
+    scale = font["head"].unitsPerEm / 1000  # the band is quoted at 1000 to the em
+    ys = np.arange(BAND[0] * scale, BAND[1] * scale, ROWS * scale)
     sides = {}
     for char in letters:
         far, near = scan(font, cmap[ord(char)], ys)
@@ -118,9 +126,14 @@ def fit(font, data, model, scripts=(LETTERS, CYRILLIC + "Ёё")):
     error on faces it has never seen, 13 units, so a pair moves only if the model can
     tell the move apart from its own noise. That figure is the model's and not this
     font's: how far a particular face disagrees is partly the face being wrong, and
-    measuring it here would leave a badly spaced font badly spaced. Last, nothing may
-    end up closer at its nearest approach than the tightest pair the model itself asks
-    for anywhere in the font.
+    measuring it here would leave a badly spaced font badly spaced.
+
+    The noise comes off in quadrature rather than straight, since subtracting it whole
+    taxes the moves that are past doubt as hard as the ones that are not: Гд stands 145
+    units wider than a room full of hand-kerned faces leaves it, and losing 14 of those
+    to the model's own error is a rounding, while a 15-unit move is nothing but error
+    and still goes to zero. Last, nothing may end up closer at its nearest approach than
+    the tightest pair the model itself asks for anywhere in the font.
     """
     read = pair_model.sides(io.BytesIO(data), letters="".join(scripts))
     kern, letters, face = kerner(data), read["letters"], read["face"]
@@ -132,10 +145,9 @@ def fit(font, data, model, scripts=(LETTERS, CYRILLIC + "Ёё")):
         for a in have:
             for b in have:
                 first, second = letters[a], letters[b]
-                joint = first["right"] + second["left"]
                 rows.append((index, a, b,
-                             first["bearing"][0] + second["bearing"][1] + kern(a, b) * scale / xheight,
-                             float(np.nanmin(joint)) if not np.all(np.isnan(joint)) else 0.0,
+                             first["bearing"][0] + second["bearing"][1]
+                             + kern(a, b) * scale / xheight + pair_model.nearest(first, second),
                              pair_model.features(first, second, face)))
     if not rows:
         return np.array([])
@@ -145,20 +157,90 @@ def fit(font, data, model, scripts=(LETTERS, CYRILLIC + "Ёё")):
     latin = np.array([not row[0] for row in rows])
     bias = float((want - have)[latin].mean()) if latin.any() else float((want - have).mean())
     noise = model["error"]
-
-    lowest = np.array([row[4] for row in rows])
-    floor = float(np.percentile(want - bias + lowest, NEAREST))  # the model's own tightest fit,
-    # rather than the font's: a face may already draw a pair that touches, and Geist does
+    floor = float(np.percentile(want - bias, NEAREST))  # the model's own tightest fit, rather
+    # than the font's: a face may already draw a pair that touches, and Geist does
 
     cmap, values = font.getBestCmap(), {}
     step, limit = QUANTUM / scale, LIMIT / scale
-    for (_, a, b, gap, nearest, _), target in zip(rows, want):
+    for (_, a, b, gap, _), target in zip(rows, want):
         move = target - bias - gap
-        move = np.sign(move) * max(abs(move) - noise, 0)
-        move = max(move, floor - (gap + nearest))
+        move = np.sign(move) * np.sqrt(max(move * move - noise * noise, 0.0))
+        move = max(move, floor - gap)
         move = int(round(float(np.clip(move * xheight / scale, -limit, limit)) / step) * step)
         if move:
             values[cmap[ord(a)], cmap[ord(b)]] = move
+    add_kern_lookup(font, values)
+    return np.array(list(values.values()))
+
+
+def tuck(font, data, scripts=(LETTERS, CYRILLIC + "Ёё")):
+    """Pull in a pair that holds a hole, judged against the pairs that share its band.
+
+    This is the one rule here that overrules the model as well as the designer, and it
+    is a judgement about the corpus rather than about any font. Most of the Cyrillic the
+    macOS fonts carry was added to a Latin face that was already drawn, and it shows in
+    exactly one place: an overhanging capital against a lowercase letter. Those faces
+    kern To and Ta and leave Гд and Ти open — Verdana leaves 376 units under Г's arm,
+    Gill Sans and Hoefler Text over 200 above their own lowercase — while the faces
+    drawn in Russia, PT Serif and PT Sans, tuck the letter under the arm and leave none.
+    The model learns the average of the two and reproduces the hole.
+
+    So the white a pair holds is capped. Only pairs that share the same band are compared,
+    which is what a capital against a capital and a capital against a lowercase letter do
+    not do: two capitals share the whole cap height, so their column of white is taller
+    and wider and stays that way, while Гд shares only the x-height with нд and is judged
+    against it. The cap is a multiple of the middle of that group rather than a percentile
+    of it, so a face with no holes keeps all of them: it moves 13 of Georgia's 2,704 Latin
+    pairs by a median 18 units, against 86 of Verdana's by 40 and Гд by 101.
+
+    A pair only counts as a hole if its ink also never comes as close as the middle pair
+    of its group does. кт and гр hold as much white as Гд and are not holes: к's arm and
+    г's arm reach over, so the ink meets somewhere even though the mean is wide, and the
+    eye reads a tuck rather than a gap. Without that condition a hard enough cap pulls гр
+    back under Geist's own kerning and undoes what играм needed.
+
+    Nothing may be pulled nearer than the tightest pair standing after `fit`, which is
+    the model's own floor and not the font's, since a pair with a hole is exactly the
+    pair whose ink has furthest to travel before it touches.
+    """
+    read = pair_model.sides(io.BytesIO(data), letters="".join(scripts))
+    kern, letters = kerner(data), read["letters"]
+    xheight, scale = read["xheight"], read["scale"]
+    cmap, values = font.getBestCmap(), {}
+    step, limit = QUANTUM / scale, LIMIT / scale
+
+    for alphabet in scripts:
+        have = [char for char in alphabet if char in letters and ord(char) in cmap]
+        # the profiles are resampled to a fixed grid and read a pair whose ink meets at the
+        # very edge of the band, е against Э, as further apart than it is; the floor below
+        # has to be exact, so it comes off the scanlines
+        room = clearances(font, kern, have) * scale / xheight  # font units into x-heights
+        rows = []
+        for i, a in enumerate(have):
+            for j, b in enumerate(have):
+                first, second = letters[a], letters[b]
+                joint = np.minimum(first["right"], pair_model.WIDE) + np.minimum(second["left"], pair_model.WIDE)
+                seen = joint[~np.isnan(joint)]
+                if len(seen) < 3 or not np.isfinite(room[i, j]):
+                    continue
+                gap = first["bearing"][0] + second["bearing"][1] + kern(a, b) * scale / xheight
+                rows.append((a, b, gap + float(seen.mean()),
+                             len(seen) / len(joint) * SPAN, room[i, j]))
+        if not rows:
+            continue
+        white = np.array([row[2] for row in rows])
+        near = np.array([row[4] for row in rows])
+        share = np.array([row[3] for row in rows])
+        floor = float(np.percentile(near, NEAREST))
+        for a, b, held, band, approach in rows:
+            group = np.abs(share - band) <= SHARED
+            ceiling = float(np.median(white[group])) * CEILING
+            if held <= ceiling or approach <= float(np.median(near[group])):
+                continue  # a pair whose ink comes close somewhere holds no hole
+            move = max(ceiling - held, floor - approach)  # never nearer than the tightest pair
+            move = int(round(float(np.clip(move * xheight / scale, -limit, limit)) / step) * step)
+            if move:
+                values[cmap[ord(a)], cmap[ord(b)]] = move
     add_kern_lookup(font, values)
     return np.array(list(values.values()))
 
