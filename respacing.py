@@ -245,8 +245,8 @@ def tuck(font, data, scripts=(LETTERS, CYRILLIC + "Ёё")):
     return np.array(list(values.values()))
 
 
-def respace(font, path, model, letters=LETTERS + CYRILLIC + "Ёё"):
-    """Respace `font`, reading the outlines and the kerning from the file it came from.
+def respace(font, data, model, letters=LETTERS + CYRILLIC + "Ёё"):
+    """Respace `font`, reading the outlines and the kerning off the bytes it came from.
 
     How a face splits its space between the left and right of a letter is a convention
     of its own, the way tracking is: shift every glyph the same distance inside its own
@@ -260,7 +260,7 @@ def respace(font, path, model, letters=LETTERS + CYRILLIC + "Ёё"):
     tell apart. A pair collects two sides, so it carries twice that. Subtracting it makes
     small moves vanish and leaves large ones nearly whole.
     """
-    latin = extract(path)
+    latin = extract(io.BytesIO(data))
     centre, tracking = centred(latin)  # the font's own Latin tracking, which stays
     unit = latin[0]["xheight"] * font["head"].unitsPerEm / 1000
     error = (model.predict(np.array([row["features"] for row in latin])) - centre) * unit
@@ -268,7 +268,7 @@ def respace(font, path, model, letters=LETTERS + CYRILLIC + "Ёё"):
     bias = np.array([error[which == side].mean() for side in (0, 1)])
     noise = float(np.abs(error - bias[which]).mean())
 
-    rows = extract(path, letters=letters)
+    rows = extract(io.BytesIO(data), letters=letters)
     wanted = model.predict(np.array([row["features"] for row in rows])) + tracking
     sides = {}
     for row, value in zip(rows, wanted):
@@ -278,7 +278,7 @@ def respace(font, path, model, letters=LETTERS + CYRILLIC + "Ёё"):
 
     proposed = [np.array([sides[c][side] for c in chars]) for side in (0, 1)]
 
-    kern = kerner(open(path, "rb").read())
+    kern = kerner(data)
     room = clearances(font, kern, chars)
     floor = np.minimum(np.percentile(room[np.isfinite(room)], NEAREST), room)
     right, left = (part.copy() for part in proposed)
@@ -298,3 +298,28 @@ def respace(font, path, model, letters=LETTERS + CYRILLIC + "Ёё"):
             moves[name] = moves[parts[0].glyphName]  # the units the model reads per script
     shift(font, moves)
     return np.array([v for pair in moves.values() for v in pair]), held, noise
+
+
+def space(font, model, pairs):
+    """The three passes in order, each reading back the outlines the last one left."""
+    moves, floored, noise = respace(font, _dump(font), model)
+    kerns = fit(font, _dump(font), pairs)
+    capped = tuck(font, _dump(font))
+    return {"moves": moves, "floored": floored, "noise": noise,
+            "kerns": kerns, "capped": capped}
+
+
+def _dump(font):
+    out = io.BytesIO()
+    font.save(out)
+    return out.getvalue()
+
+
+def summary(stats):
+    """The one line each build script prints per face."""
+    moves, kerns, capped = stats["moves"], stats["kerns"], stats["capped"]
+    return (f"{len(moves) // 2} letters, mean move {np.abs(moves).mean():.0f}, "
+            f"{moves.min()}..{moves.max()}, noise {stats['noise']:.0f} subtracted, "
+            f"floor held back {stats['floored']:.0f}; {len(kerns)} pairs kerned "
+            f"({(kerns > 0).sum()} opened), mean |kern| {np.abs(kerns).mean():.0f}; "
+            f"{len(capped)} holes capped by {np.abs(capped).mean() if len(capped) else 0:.0f}")

@@ -1,5 +1,5 @@
 # /// script
-# dependencies = ["fonttools"]
+# dependencies = ["fonttools", "uharfbuzz", "numpy", "joblib", "scikit-learn>=1.9"]
 # ///
 """Build 'Inter Fix RA' — Inter Fix with the a and the 1 of Raveo.
 
@@ -19,6 +19,11 @@ by copying the glyph: that reaches the tabular, superscript and fraction forms t
 Raveo never drew, so the digit reads the same in a table as in a line of text. The
 romans then take Raveo's proportional 1 on top, which is that alternate redrawn.
 
+The build starts from Inter itself rather than from the finished Inter Fix, so that
+the models in `respacing.py` are the last thing to run and read Raveo's a rather
+than Inter's: the tail changes what the letter's right side holds, and a pair kerned
+against the old outline would be kerned against a glyph that is no longer there.
+
     git clone https://github.com/jakubfoglar/raveo scratchpad/raveo
     uv run build_inter_fix_ra.py
 """
@@ -26,12 +31,16 @@ romans then take Raveo's proportional 1 on top, which is that alternate redrawn.
 import copy
 import os
 
+import joblib
 from fontTools.pens.cu2quPen import Cu2QuPen
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 from fontTools.ttLib import TTCollection, TTFont
 
+from build_inter_fix import fix
+from respacing import space, summary
+
 HERE = os.path.dirname(os.path.abspath(__file__))
-SRC = os.path.join(HERE, "fonts", "InterFix", "InterFix.ttc")
+SRC = os.path.expanduser("~/Library/Fonts/Inter.ttc")
 RAVEO = os.path.join(HERE, "scratchpad", "raveo", "fonts", "static")
 DST = os.path.join(HERE, "fonts", "InterFixRA")
 TAKEN = ("a", "one")
@@ -72,26 +81,30 @@ def rename(font):
     name = font["name"]
     for rec in name.names:
         if rec.nameID in (1, 4, 16):
-            name.setName(str(rec).replace("Inter Fix", "Inter Fix RA"), rec.nameID,
+            name.setName(str(rec).replace("Inter", "Inter Fix RA"), rec.nameID,
                          rec.platformID, rec.platEncID, rec.langID)
         elif rec.nameID in (3, 6):
-            name.setName(str(rec).replace("InterFix", "InterFixRA"), rec.nameID,
+            name.setName(str(rec).replace("Inter", "InterFixRA"), rec.nameID,
                          rec.platformID, rec.platEncID, rec.langID)
 
 
 def main():
     os.makedirs(DST, exist_ok=True)
+    model = joblib.load(os.path.join(HERE, "spacing-model.joblib"))
+    pairs = joblib.load(os.path.join(HERE, "pair-model.joblib"))
     collection = TTCollection(SRC)
     for font in collection.fonts:
-        style = font["name"].getDebugName(4).removeprefix("Inter Fix ")
+        style = font["name"].getDebugName(4).removeprefix("Inter ")
+        fix(font)
         bake(font, "cv01")
         report = "cv01 baked"
         if "Italic" not in style:
             donor = TTFont(os.path.join(RAVEO, f"Raveo {style}.otf"))
             deltas = [take(font, donor, name) for name in TAKEN]
             report += "  " + "  ".join(f"{n} {d:+d}" for n, d in zip(TAKEN, deltas))
+        stats = space(font, model, pairs)
         rename(font)
-        print(f"{style:24s} {report}")
+        print(f"{style:24s} {report}  {summary(stats)}", flush=True)
     collection.save(os.path.join(DST, "InterFixRA.ttc"))
 
 
