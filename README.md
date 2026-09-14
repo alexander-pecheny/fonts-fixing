@@ -307,6 +307,43 @@ drowns the careful minority, and filtering by `care()` made it worse again by cu
 data without concentrating it enough. The macOS set is small, curated, and none of it is a
 font this repository patches.
 
+## Setting in Arial's space
+
+A document set in Arial and re-set in Inter runs 7.8% longer in Russian and 7.5% longer in
+English. Lines break elsewhere, tables widen, a page turns into two. Nothing about the
+letters is wrong; they are drawn wider on the em than Arial's are. The em is a free choice,
+so `build_intertica.py` changes it and nothing else: every outline, sidebearing, kern and
+anchor of Inter Fix RA is scaled by 1902/2048 = 0.9287 and the em is left at 2048. No point
+lands more than half a unit off an exact scale, so the shapes are Inter's; they stand 7.1%
+smaller in the em, and a paragraph comes out the length Arial's does.
+
+The factor is fitted on running text with its spaces and punctuation, not on the alphabet:
+a space is 0.278 em in Arial against 0.281 in Inter while a letter is 8.7% wider, so it is
+the mix that has to match. Russian and English ask for 0.9276 and 0.9301 independently.
+Fitted on the Regular alone, which is what body text is made of. Inter's Bold widens over
+its Regular 4.3% less than Arial's does — in stock Inter as much as here, so it is Inter's
+drawing and not this repository's spacing — and no one factor serves both. Splitting the
+difference was tried and dropped: it sets a bold run at a visibly different size from the
+text around it, a worse fault than a heading 4% short. The Bold lands 4% narrow, the Bold
+Italic 5%, the Italic within 2%.
+
+The Display faces take the same factor rather than their own, though Inter Display already
+measures within 1.6% of Arial unscaled. Display shares Inter's cap height by design, and
+scaling one cut and not the other would make the display faces draw 9.4% larger than the
+text faces at the same size.
+
+Vertical metrics are Arial's own, read off the file — hhea, OS/2 typographic and OS/2 win,
+all three, with `USE_TYPO_METRICS` cleared as Arial leaves it. Renderers disagree about
+which set to read, and copying all of them is how they are made to agree; the default line
+comes to 1.1499 em where Inter asks for 1.2100. Typst is the exception, and none of it
+reaches it: typst's line spacing is the leading plus the cap height, so a line there follows
+the outlines and runs 3.0% tighter than Arial's. `#set par(leading: 0.69em)` puts the
+baselines back where Arial has them.
+
+What the fit costs is size on the page. The cap falls from 1490 units to 1384 against
+Arial's 1467 and the x-height from 1118 to 1038 against 1062, so Intertica reads 5.7%
+smaller than Arial by its capitals and 2.3% by its lowercase, and takes the same room.
+
 ## Math in Literata
 
 A math font is one file that carries a MATH table, every symbol, and the letters that
@@ -338,6 +375,7 @@ Built copies live in `fonts/`; install with `cp -r fonts/GeistFix ~/Library/Font
 | `build_geist_fix.py` → Geist Fix | Anchors U+0301 over every Cyrillic vowel, but registers `mark` only under `latn`, so none of it applied to Russian. Also moves ы off its right stroke, respaces both scripts from the sidebearing model, kerns every pair from the pair model, and caps the holes an overhanging capital leaves. Patches all 18 static styles; `geist-sample.typ` sets a line before and after. |
 | `build_inter_fix.py` → Inter Fix | Same unregistered `cyrl` script as Geist, plus Ю and я were never anchored. Then the same three passes as Geist Fix: sidebearings from the model, kerning from the pair model, and the cap on holes. Also draws the pause sign U+23F8, which Inter lacks though it has ▶, ■ and ⏏; see `pausefix.py`. Rewrites the whole 36-face collection, Inter and Inter Display alike. |
 | `build_inter_fix_ra.py` → Inter Fix RA | Inter Fix with the a and the 1 of [Raveo](https://github.com/jakubfoglar/raveo), a fork of Inter that gives a a tail and bakes in the cv01 flag on 1. R stays Inter's. Each roman takes the glyphs from the Raveo static of the same name, so Medium, SemiBold and Bold get an a a step darker than the rest of the face, as Raveo weights them. Cyrillic а and every accented a are composites of a and follow. Raveo has no italics and Inter's italic a is single-storey, so the italics keep Inter's a and only take the 1, which is baked through Inter's own cv01 so tabular, superscript and fraction forms match. Built from Inter rather than from the finished Inter Fix, so the spacing and kerning passes run last and read Raveo's a: the tail changes what the letter's right side holds. |
+| `build_intertica.py` → Intertica | Inter Fix RA scaled by 0.9287 on the em, with Arial's vertical metrics, so an Arial document re-set in it fills the same lines and the same pages. Outlines untouched but for the scale; see the section above. Built from the finished `InterFixRA.ttc`, so rebuild that first. |
 | `build_ibm_plex_fix.py` → IBM Plex Sans Fix, IBM Plex Serif Fix | Ё, Э, Ю and Я are the vowels Plex never anchored; the rest of its Cyrillic already works. Both families, 16 styles each. |
 | `build_roboto_flex_fix.py` → Roboto Flex Fix | No Cyrillic acute anchors, and typst ignores variable axes so every weight rendered as Regular. Emits static Regular/Italic/Bold/Bold Italic. |
 | `build_sofia_sans_ru.py` → Sofia Sans Ru | Sofia Sans ships Bulgarian letterforms as the default; this variant makes the Russian ones default and keeps the Bulgarian set on ss01. Also adds acute anchors on Cyrillic vowels. |
