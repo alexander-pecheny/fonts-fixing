@@ -7,6 +7,9 @@ Inter has both faults at once: its GPOS `cyrl` script lists only `kern`, so the
 mark positioning it does have never runs for Russian; and Ю and я are the two
 vowels it never anchored. Everything else keeps the designer's own anchors.
 
+It also draws the pause sign U+23F8 it never had, from its own play and stop; see
+`pausefix.py`.
+
 The sidebearings and the kerning then come from the two models; see `respacing.py`.
 Inter draws much of its Cyrillic as composites of the Latin letter, so both scripts
 are respaced together and every glyph built on a moved one follows it.
@@ -20,6 +23,7 @@ import joblib
 from fontTools.ttLib import TTCollection
 
 from acutefix import add_acute_anchors, enable_features
+from pausefix import add_pause
 from respacing import space, summary
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -28,8 +32,9 @@ DST = os.path.join(HERE, "fonts", "InterFix")
 
 
 def fix(font):
-    """Inter's own two faults: `cyrl` listing only `kern`, and Ю and я never anchored."""
-    return enable_features(font, "cyrl"), add_acute_anchors(font)
+    """Inter's own faults: `cyrl` listing only `kern`, Ю and я never anchored, and a
+    play and a stop sign with no pause between them."""
+    return enable_features(font, "cyrl"), add_acute_anchors(font), add_pause(font)
 
 
 def rename(font):
@@ -49,12 +54,12 @@ def main():
     pairs = joblib.load(os.path.join(HERE, "pair-model.joblib"))
     collection = TTCollection(SRC)
     for font in collection.fonts:
-        added, anchors = fix(font)
+        added, anchors, bar = fix(font)
         stats = space(font, model, pairs)
         style = font["name"].getDebugName(4)
         rename(font)
         print(f"{style:32s} cyrl +{','.join(added) or 'nothing'}  "
-              f"anchors +{' '.join(anchors) or '0'}  {summary(stats)}", flush=True)
+              f"anchors +{' '.join(anchors) or '0'}  pause {bar}  {summary(stats)}", flush=True)
     collection.save(os.path.join(DST, "InterFix.ttc"))
 
 

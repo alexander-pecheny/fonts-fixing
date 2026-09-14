@@ -95,9 +95,9 @@ def main():
     collection = TTCollection(SRC)
     for font in collection.fonts:
         style = font["name"].getDebugName(4).removeprefix("Inter ")
-        fix(font)
+        _, _, bar = fix(font)
         bake(font, "cv01")
-        report = "cv01 baked"
+        report = f"cv01 baked  pause {bar}"
         if "Italic" not in style:
             donor = TTFont(os.path.join(RAVEO, f"Raveo {style}.otf"))
             deltas = [take(font, donor, name) for name in TAKEN]
