@@ -268,12 +268,23 @@ HI come through this pass untouched.
 Two conditions have to hold before a pair counts as a hole. Its white must stand more
 than 1.55 times the middle of its group — a multiple rather than a percentile, since a
 percentile moves the same share of pairs in every font however well it is spaced — and
-its ink must never come as close as the middle pair of that group does. кт and гр hold as
-much white as Гд and are not holes: an arm reaches over in each, so the ink meets
-somewhere, and the eye reads a tuck rather than a gap. Without the second condition a
-hard enough cap pulls гр back under Geist's own kerning and undoes what играм needed.
+its ink must stay more than 1.55 times as far off as the middle pair of that group comes.
+кт and гр hold as much white as Гд and are not holes: an arm reaches over in each, so the
+ink meets somewhere, and the eye reads a tuck rather than a gap. Without the second
+condition a hard enough cap pulls гр back under Geist's own kerning and undoes what играм
+needed.
 
-In Geist's Regular it caps 309 pairs by a median 50 units: Гд from 342 to 223, Га from
+The second condition first asked only that the ink never come as close as the middle
+pair, and in Inter that is a knife edge. Inter spaces its stems loosely, so the middle
+pair of its x-height band comes within 270 units, and С's terminals and Е's arms end
+277 and 294 units off и and р: just far enough to count, though they are the edge of
+the letter as much as a stem is. Си was tucked by 153 units and Ер by 112, which set
+Сисин and Ершов visibly tight. Measured as a multiple of the middle, the approaches fall
+into two groups with nothing between them, in Inter and Geist alike: 1.00 to 1.54 for
+С, Е, Ё, F and L against their neighbours, 1.56 to 3.2 for Г, Т, Ъ and Ь against the
+lowercase. The same 1.55 that caps the white separates them.
+
+In Geist's Regular it caps 99 pairs by a median 60 units: Гд from 342 to 223, Га from
 336 to 255, Ул from 277 to 199, Ту from 235 to 205. Against the 61 hand-kerned Cyrillic
 faces, the Cyrillic pairs standing more than 60 units wider than the room full of them
 fall from 36 to 11, and the Latin from 7 to none. The floor is exact here rather than

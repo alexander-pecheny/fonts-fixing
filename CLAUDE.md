@@ -29,7 +29,8 @@ full. Three passes, in this order:
    overrules the model. Most of the Cyrillic in the corpus was added to a Latin face that
    was already drawn, so it kerns To and leaves Гд open, and the model reproduces that.
    A pair is a hole if it holds more than `CEILING` times the middle of the pairs that
-   share its band *and* its ink never comes as close as that middle pair does. Comparing
+   share its band *and* its ink stays more than `CEILING` times as far off as that middle
+   pair comes. Comparing
    within the band is what keeps two capitals loose while a capital against a lowercase
    letter is judged against lowercase; the second condition is what spares кт and гр.
    Read the reasoning in the docstring before touching either.

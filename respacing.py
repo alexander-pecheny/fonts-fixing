@@ -193,11 +193,15 @@ def tuck(font, data, scripts=(LETTERS, CYRILLIC + "Ёё")):
     of it, so a face with no holes keeps all of them: it moves 13 of Georgia's 2,704 Latin
     pairs by a median 18 units, against 86 of Verdana's by 40 and Гд by 101.
 
-    A pair only counts as a hole if its ink also never comes as close as the middle pair
-    of its group does. кт and гр hold as much white as Гд and are not holes: к's arm and
-    г's arm reach over, so the ink meets somewhere even though the mean is wide, and the
-    eye reads a tuck rather than a gap. Without that condition a hard enough cap pulls гр
-    back under Geist's own kerning and undoes what играм needed.
+    A pair only counts as a hole if its ink also stays more than `CEILING` times as far
+    off as the middle pair of its group comes. кт and гр hold as much white as Гд and are
+    not holes: к's arm and г's arm reach over, so the ink meets somewhere even though the
+    mean is wide, and the eye reads a tuck rather than a gap. Without that condition a
+    hard enough cap pulls гр back under Geist's own kerning and undoes what играм needed.
+    It is a multiple and not the middle itself, since С's terminals and Е's arms are the
+    edge of the letter too: in Inter they end 277 and 294 units off и and р against a
+    middle of 270, and a bar at the middle tucked Си by 153 units. Across Inter and Geist
+    the ratio runs 1.00 to 1.54 for С, Е, F and L and 1.56 to 3.2 for Г, Т and Ъ.
 
     Nothing may be pulled nearer than the tightest pair standing after `fit`, which is
     the model's own floor and not the font's, since a pair with a hole is exactly the
@@ -235,7 +239,7 @@ def tuck(font, data, scripts=(LETTERS, CYRILLIC + "Ёё")):
         for a, b, held, band, approach in rows:
             group = np.abs(share - band) <= SHARED
             ceiling = float(np.median(white[group])) * CEILING
-            if held <= ceiling or approach <= float(np.median(near[group])):
+            if held <= ceiling or approach <= float(np.median(near[group])) * CEILING:
                 continue  # a pair whose ink comes close somewhere holds no hole
             move = max(ceiling - held, floor - approach)  # never nearer than the tightest pair
             move = int(round(float(np.clip(move * xheight / scale, -limit, limit)) / step) * step)
