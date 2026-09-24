@@ -65,6 +65,34 @@ back in on advance widths that never changed. `build_spectral_fix.py` fetches bo
 from the Google Fonts repository and swaps the six, dropping their hinting, which was
 written against another font's control values.
 
+## The system font
+
+SF Pro, the macOS system font, has no `mark` feature at all, so до́стал sets its acute after
+the о in every browser that shapes with HarfBuzz. Latin escapes because á composes to a
+precomposed glyph. `build_sf_fix.py` gives each Cyrillic vowel a composite on the same
+pattern plus a `ccmp` ligature, and writes "SF Pro Fix" to `scratchpad/sf/`: Apple's licence
+forbids shipping it, and the system copy sits on the sealed, SIP-protected volume.
+
+Firefox can be pointed at the copy without touching the system. The pref
+`font.name.system-ui.<langGroup>` redirects the `system-ui` generic, and `@font-face`
+rules in the profile's `chrome/userContent.css` redirect `-apple-system` and
+`BlinkMacSystemFont`, which are family names rather than generics. The css needs
+`toolkit.legacyUserProfileCustomizations.stylesheets`:
+
+```js
+// user.js; repeat the font.name line for x-western and x-unicode
+user_pref("toolkit.legacyUserProfileCustomizations.stylesheets", true);
+user_pref("font.name.system-ui.x-cyrillic", "SF Pro Fix");
+```
+
+```css
+/* chrome/userContent.css; again with "SF Pro Fix Italic" and font-style: italic, and for BlinkMacSystemFont */
+@font-face { font-family: "-apple-system"; src: local("SF Pro Fix Regular");
+             font-weight: 1 1000; font-stretch: 30% 150%; }
+```
+
+Safari and native apps ask CoreText for the system font directly and keep the old one.
+
 ## Cyrillic spacing
 
 Sidebearings are a poor guide to how a serif face is spaced. The stem stands well back
