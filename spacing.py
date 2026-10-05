@@ -62,32 +62,54 @@ class FlattenPen(BasePen):
     _endPath = _closePath
 
 
-def runs(font, glyph_name, ys):
-    """The ink intervals at each scanline, by nonzero winding: [[(start, end), ...], ...].
-
-    What is between the extremes matters as much as where they are — a wire-thin serif
-    and a slab put their edge in the same place — so the interior crossings are kept.
-    """
+def outline(font, glyph_name):
+    """The glyph's contours, components decomposed and curves flattened to polylines."""
     glyphs = font.getGlyphSet()
     record = DecomposingRecordingPen(glyphs)
     glyphs[glyph_name].draw(record)
     pen = FlattenPen(glyphs)
     record.replay(pen)
     pen._closePath()
+    return [polygon for polygon in pen.polygons if len(polygon) > 2]
 
-    out = []
+
+def filled(polygons, y):
+    """The intervals of a scanline that are ink, by nonzero winding, left to right.
+
+    Overlapping contours can split one run of ink into two that touch; they come back
+    as two intervals, and `runs` is where they are joined.
+    """
+    crossings = []
+    for polygon in polygons:
+        points = polygon + [polygon[0]]
+        for (x0, y0), (x1, y1) in zip(points, points[1:]):
+            if (y0 <= y < y1) or (y1 <= y < y0):
+                crossings.append((x0 + (x1 - x0) * (y - y0) / (y1 - y0), 1 if y1 > y0 else -1))
+    crossings.sort()
+    winding, out = 0, []
+    for (start, direction), (end, _) in zip(crossings, crossings[1:]):
+        winding += direction
+        if winding:
+            out.append((start, end))
+    return out
+
+
+def _fill(columns, spans, pixel):
+    for start, end in spans:
+        columns[max(int(start / pixel), 0) : max(int(end / pixel), 0)] += 1
+
+
+def runs(font, glyph_name, ys):
+    """The ink intervals at each scanline, by nonzero winding: [[(start, end), ...], ...].
+
+    What is between the extremes matters as much as where they are — a wire-thin serif
+    and a slab put their edge in the same place — so the interior crossings are kept.
+    """
+    polygons, out = outline(font, glyph_name), []
     for y in ys:
-        crossings = []
-        for polygon in (p for p in pen.polygons if len(p) > 2):
-            points = polygon + [polygon[0]]
-            for (x0, y0), (x1, y1) in zip(points, points[1:]):
-                if (y0 <= y < y1) or (y1 <= y < y0):
-                    crossings.append((x0 + (x1 - x0) * (y - y0) / (y1 - y0), 1 if y1 > y0 else -1))
-        crossings.sort()
-        winding, spans = 0, []
-        for (start, direction), (end, _) in zip(crossings, crossings[1:]):
-            winding += direction
-            if not winding or end <= start:
+        spans = []
+        for start, end in filled(polygons, y):
+            if end <= start:
                 continue
             if spans and start - spans[-1][1] < 0.5:  # overlapping contours split a run in two
                 spans[-1] = (spans[-1][0], end)
@@ -108,28 +130,10 @@ def scan(font, glyph_name, ys):
 
 def ink_columns(font, glyph_name, band=BAND, pixel=PIXEL):
     """Ink area per column of the glyph, laid out from its origin."""
-    glyphs = font.getGlyphSet()
-    record = DecomposingRecordingPen(glyphs)
-    glyphs[glyph_name].draw(record)
-    pen = FlattenPen(glyphs)
-    record.replay(pen)
-    pen._closePath()
-
-    advance = font["hmtx"][glyph_name][0]
+    polygons, advance = outline(font, glyph_name), font["hmtx"][glyph_name][0]
     columns = np.zeros(int(advance / pixel) + 4)
     for y in np.arange(*band, pixel):
-        crossings = []
-        for polygon in (p for p in pen.polygons if len(p) > 2):
-            points = polygon + [polygon[0]]
-            for (x0, y0), (x1, y1) in zip(points, points[1:]):
-                if (y0 <= y < y1) or (y1 <= y < y0):
-                    crossings.append((x0 + (x1 - x0) * (y - y0) / (y1 - y0), 1 if y1 > y0 else -1))
-        crossings.sort()
-        winding = 0
-        for (start, direction), (end, _) in zip(crossings, crossings[1:]):
-            winding += direction  # nonzero winding, so overlapping contours still fill
-            if winding:
-                columns[max(int(start / pixel), 0) : max(int(end / pixel), 0)] += 1
+        _fill(columns, filled(polygons, y), pixel)
     return columns, advance
 
 
@@ -139,29 +143,12 @@ def sector_columns(font, glyph_name, sectors, band=BAND, pixel=PIXEL):
     Collapsing a glyph's whole height into one profile lets a capital's shoulders
     fill the gap beside a lowercase letter; keeping the bands apart does not.
     """
-    glyphs = font.getGlyphSet()
-    record = DecomposingRecordingPen(glyphs)
-    glyphs[glyph_name].draw(record)
-    pen = FlattenPen(glyphs)
-    record.replay(pen)
-    pen._closePath()
-
+    polygons = outline(font, glyph_name)
     edges = np.linspace(band[0], band[1], sectors + 1)
     out = np.zeros((sectors, int(font["hmtx"][glyph_name][0] / pixel) + 4))
     for index in range(sectors):
         for y in np.arange(edges[index], edges[index + 1], pixel):
-            crossings = []
-            for polygon in (p for p in pen.polygons if len(p) > 2):
-                points = polygon + [polygon[0]]
-                for (x0, y0), (x1, y1) in zip(points, points[1:]):
-                    if (y0 <= y < y1) or (y1 <= y < y0):
-                        crossings.append((x0 + (x1 - x0) * (y - y0) / (y1 - y0), 1 if y1 > y0 else -1))
-            crossings.sort()
-            winding = 0
-            for (start, direction), (end, _) in zip(crossings, crossings[1:]):
-                winding += direction  # nonzero winding, so overlapping contours still fill
-                if winding:
-                    out[index, max(int(start / pixel), 0) : max(int(end / pixel), 0)] += 1
+            _fill(out[index], filled(polygons, y), pixel)
     return out
 
 
