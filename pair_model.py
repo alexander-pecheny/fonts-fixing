@@ -16,66 +16,38 @@ of white between them, not its width alone. And a pair with a cavity comes out c
 because the white it already holds is counted.
 """
 
-import math
-
 import numpy as np
-from fontTools.pens.boundsPen import BoundsPen
-from fontTools.pens.transformPen import TransformPen
 from fontTools.ttLib import TTFont
 
-from spacing import runs
-from spacing_model import BAND, CYRILLIC, DEPTH, LETTERS, ROWS, SAMPLES, _face_features, _script
+from spacing_model import LETTERS, SAMPLES, _profile, _script, read
 
 WIDE = 1.2  # of x-height, the widest gap worth telling apart: beyond it a pair is simply open
 JOINT = 12  # readings of the white between the two letters kept as features
 
 
-def _profile(values, count):
-    if len(values) < 2:
-        return np.full(count, DEPTH)
-    return np.interp(np.linspace(0, len(values) - 1, count), np.arange(len(values)), values)
-
-
 def sides(path, font_number=0, letters=LETTERS):
     """Each letter's facing profiles and its ink-to-advance bearings, in x-heights."""
-    font = TTFont(path, fontNumber=font_number, lazy=True)
-    if "glyf" not in font and "CFF " not in font:
+    face = read(path, font_number)
+    if face is None:
         return None
-    scale = 1000 / font["head"].unitsPerEm
-    xheight = getattr(font["OS/2"], "sxHeight", 0) * scale
-    if not 300 < xheight < 700:
-        return None
-
-    cmap, hmtx, glyphs = font.getBestCmap(), font["hmtx"], font.getGlyphSet()
-    lean = math.tan(math.radians(-font["post"].italicAngle))
-    ys = np.linspace(BAND[0] * xheight, BAND[1] * xheight, int((BAND[1] - BAND[0]) * xheight / ROWS))
-    face = _face_features(font, cmap, glyphs, scale, xheight, ys)
+    xheight = face.xheight
 
     out = {}
     for char in letters:
-        if ord(char) not in cmap:
+        found = face.letter(char)
+        if found is None:
             continue
-        name = cmap[ord(char)]
-        pen = BoundsPen(glyphs)
-        try:
-            glyphs[name].draw(TransformPen(pen, (1, 0, -lean, 1, 0, 0)))
-        except Exception:
-            continue
-        if not pen.bounds or (pen.bounds[2] - pen.bounds[0]) * scale < 10:
-            continue
-        xmin, ymin, xmax, ymax = (v * scale for v in pen.bounds)
-        spans = [[(a * scale - y * lean, b * scale - y * lean) for a, b in row]
-                 for row, y in zip(runs(font, name, ys / scale), ys)]
+        name, (xmin, ymin, xmax, ymax), spans = found
         right = np.array([row[-1][1] if row else np.nan for row in spans])
         left = np.array([row[0][0] if row else np.nan for row in spans])
         out[char] = {
             "right": _profile((xmax - right) / xheight, SAMPLES),  # back from the rightmost ink
             "left": _profile((left - xmin) / xheight, SAMPLES),
-            "bearing": ((hmtx[name][0] * scale - xmax) / xheight, xmin / xheight),
+            "bearing": ((face.advance(name) - xmax) / xheight, xmin / xheight),
             "height": ((ymax - ymin) / xheight, max(ymax - xheight, 0) / xheight, max(-ymin, 0) / xheight),
             "upper": float(char.isupper()), "script": _script(char),
         }
-    return {"letters": out, "face": face, "xheight": xheight, "scale": scale}
+    return {"letters": out, "face": face.features, "xheight": xheight, "scale": face.scale}
 
 
 def nearest(first, second):

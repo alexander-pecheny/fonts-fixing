@@ -39,10 +39,12 @@ Nothing in any of it is particular to one font, and none of it needs the font to
 been spaced or kerned at all: the models supply every judgement and the only thing read
 off the face is its tracking, one number. Constants sit at the top of `respacing.py`.
 
-`spacing.py` holds the geometry — scanline profiles, the soft-minimum channel, the blurred
-page reading, `add_kern_lookup`. `spacing_model.py` and `pair_model.py` extract the
-features; `train_spacing.py` and `train_pairs.py` fit the two models on the fonts macOS
-ships.
+`spacing.py` holds the geometry — a glyph flattened once and cut along scanlines, the
+column reading the blurred page is made of, `kerner` and `add_kern_lookup`.
+`spacing_model.py` reads a face for both models (`read`, then `Face.letter`), and it and
+`pair_model.py` extract the features from that reading; `train_spacing.py` and
+`train_pairs.py` fit the two models on the fonts macOS ships. `naming.py` renames a
+family in the name table.
 
 ## What counts as done
 

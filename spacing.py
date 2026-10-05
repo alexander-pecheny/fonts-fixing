@@ -1,10 +1,9 @@
-"""How wide the white channel between two glyphs reads, and how to kern it shut.
+"""The geometry both models and every pass stand on: where a glyph has ink, and kerning.
 
-Sidebearings say very little about that in a serif face: a stem sits far back from
-the advance and only its serifs reach out, so two flat-sided letters keep a channel
-two or three times wider than their sidebearings suggest. What the eye judges is
-closer to the narrowest part of the channel, so pairs are measured with a soft
-minimum over the scanlines where both letters have ink.
+`outline` flattens a glyph once and `filled` cuts it along one scanline by nonzero
+winding. `runs` and `scan` read a side off those cuts, `sector_columns` reads the ink
+per column the blurred page in `build_literata_uniform.py` is made of. `kerner` asks a
+shaper what a font already kerns, and `add_kern_lookup` adds to it.
 """
 
 import numpy as np
@@ -12,9 +11,6 @@ from fontTools.pens.basePen import BasePen
 from fontTools.pens.recordingPen import DecomposingRecordingPen
 from fontTools.ttLib.tables import otTables as ot
 
-STEP = 20  # units between scanlines
-FLOOR = 20.0  # a channel never reads tighter than this, whatever the outlines do
-SOFTNESS = -2  # power-mean exponent: the more negative, the more the narrowest part counts
 BAND = (-220, 760)  # vertical range a pair is read over, descenders included
 PIXEL = 5  # units per column when a glyph is rasterised
 
@@ -128,15 +124,6 @@ def scan(font, glyph_name, ys):
     return right, left
 
 
-def ink_columns(font, glyph_name, band=BAND, pixel=PIXEL):
-    """Ink area per column of the glyph, laid out from its origin."""
-    polygons, advance = outline(font, glyph_name), font["hmtx"][glyph_name][0]
-    columns = np.zeros(int(advance / pixel) + 4)
-    for y in np.arange(*band, pixel):
-        _fill(columns, filled(polygons, y), pixel)
-    return columns, advance
-
-
 def sector_columns(font, glyph_name, sectors, band=BAND, pixel=PIXEL):
     """Ink per column, kept separately for each horizontal band of the glyph.
 
@@ -158,23 +145,6 @@ def gaussian(sigma, pixel=PIXEL):
     return kernel / kernel.sum()
 
 
-def trough(left, right, kern, kernel, pixel=PIXEL):
-    """How much ink the lightest column between two letters is seen to carry.
-
-    Blurring an image and adding up its columns is the same as adding up the columns
-    and blurring that, so a glyph never needs rasterising in two dimensions.
-    """
-    (columns_a, advance, first_a, last_a), (columns_b, _, first_b, last_b) = left, right
-    offset = int(round((advance + kern) / pixel))
-    both = np.zeros(max(len(columns_a), offset + len(columns_b)) + len(kernel))
-    both[: len(columns_a)] += columns_a
-    both[offset : offset + len(columns_b)] += columns_b
-    seen = np.convolve(both, kernel, mode="same")
-
-    lo, hi = sorted((last_a, offset + first_b))
-    return seen[lo : hi + 1].min()
-
-
 def kerner(data):
     """Returns the kerning a shaper already applies to a pair, in font units."""
     import uharfbuzz as hb  # only shaping needs it; the geometry here does not
@@ -192,25 +162,6 @@ def kerner(data):
         return total(True) - total(False)
 
     return kern
-
-
-def channels(font, data, chars, top=760):
-    """Soft-minimum channel width for every ordered pair of `chars`, kerning included."""
-    cmap, hmtx = font.getBestCmap(), font["hmtx"]
-    scale = font["head"].unitsPerEm / 1000
-    ys = np.arange(-40 * scale, top * scale, STEP * scale)
-    sides = {c: scan(font, cmap[ord(c)], ys) for c in chars}
-    kern = kerner(data)
-
-    out = {}
-    for a in chars:
-        right = hmtx[cmap[ord(a)]][0] - sides[a][0]
-        for b in chars:
-            gap = (right + sides[b][1] + kern(a, b)) / scale
-            both = gap[~np.isnan(gap)]
-            if len(both):
-                out[(a, b)] = float(np.mean(np.maximum(both, FLOOR) ** SOFTNESS) ** (1 / SOFTNESS))
-    return out
 
 
 def add_kern_lookup(font, pairs):

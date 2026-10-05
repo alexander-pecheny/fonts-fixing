@@ -177,47 +177,76 @@ def _face_features(font, cmap, glyphs, scale, xheight, ys):
     ]
 
 
+class Face:
+    """One font as both models read it: at 1000 to the em, sheared upright, sampled
+    on scanlines across `BAND`, and summed up by `_face_features`."""
+
+    def __init__(self, font):
+        self.font = font
+        self.scale = 1000 / font["head"].unitsPerEm
+        self.xheight = getattr(font["OS/2"], "sxHeight", 0) * self.scale
+        self.cmap, self.glyphs = font.getBestCmap(), font.getGlyphSet()
+        self.lean = math.tan(math.radians(-font["post"].italicAngle))  # shear the slant out
+        self.ys = np.linspace(BAND[0] * self.xheight, BAND[1] * self.xheight,
+                              int((BAND[1] - BAND[0]) * self.xheight / ROWS))
+        self.features = None
+
+    def advance(self, name):
+        return self.font["hmtx"][name][0] * self.scale
+
+    def letter(self, char):
+        """(glyph name, sheared ink bounds, ink spans per scanline), or None for a letter
+        the face lacks, cannot draw, or draws narrower than 10 units."""
+        if ord(char) not in self.cmap:
+            return None
+        name, scale, lean = self.cmap[ord(char)], self.scale, self.lean
+        pen = BoundsPen(self.glyphs)
+        try:
+            self.glyphs[name].draw(TransformPen(pen, (1, 0, -lean, 1, 0, 0)))
+        except Exception:
+            return None
+        if not pen.bounds or (pen.bounds[2] - pen.bounds[0]) * scale < 10:
+            return None
+        spans = [[(a * scale - y * lean, b * scale - y * lean) for a, b in row]
+                 for row, y in zip(runs(self.font, name, self.ys / scale), self.ys)]
+        return name, tuple(v * scale for v in pen.bounds), spans
+
+
+def read(path, font_number=0):
+    """A face ready to read, or None if it has no outlines or no plausible x-height."""
+    font = TTFont(path, fontNumber=font_number, lazy=True)
+    if "glyf" not in font and "CFF " not in font:
+        return None
+    face = Face(font)
+    if not 300 < face.xheight < 700:
+        return None
+    face.features = _face_features(font, face.cmap, face.glyphs, face.scale, face.xheight, face.ys)
+    return face
+
+
 def extract(path, font_number=0, letters=LETTERS):
     """Every letter side of one font: its features, and the sidebearing it was given.
 
     The features read outlines, not codepoints, so a Latin-trained model can be asked
     about another script by passing its letters here.
     """
-    font = TTFont(path, fontNumber=font_number, lazy=True)
-    if "glyf" not in font and "CFF " not in font:
+    face = read(path, font_number)
+    if face is None:
         return []
-    scale = 1000 / font["head"].unitsPerEm
-    xheight = getattr(font["OS/2"], "sxHeight", 0) * scale
-    if not 300 < xheight < 700:
-        return []
-
-    cmap, hmtx, glyphs = font.getBestCmap(), font["hmtx"], font.getGlyphSet()
-    family = font["name"].getDebugName(16) or font["name"].getDebugName(1) or path
-    lean = math.tan(math.radians(-font["post"].italicAngle))  # shear the slant out
-    ys = np.linspace(BAND[0] * xheight, BAND[1] * xheight, int((BAND[1] - BAND[0]) * xheight / ROWS))
-    face = _face_features(font, cmap, glyphs, scale, xheight, ys)
+    xheight, ys = face.xheight, face.ys
+    family = face.font["name"].getDebugName(16) or face.font["name"].getDebugName(1) or path
 
     rows = []
     for char in letters:
-        if ord(char) not in cmap:
+        found = face.letter(char)
+        if found is None:
             continue
-        name = cmap[ord(char)]
-        pen = BoundsPen(glyphs)
-        try:
-            glyphs[name].draw(TransformPen(pen, (1, 0, -lean, 1, 0, 0)))
-        except Exception:
-            continue
-        if not pen.bounds or (pen.bounds[2] - pen.bounds[0]) * scale < 10:
-            continue
-        xmin, ymin, xmax, ymax = (v * scale for v in pen.bounds)
-
-        spans = [[(a * scale - y * lean, b * scale - y * lean) for a, b in row]
-                 for row, y in zip(runs(font, name, ys / scale), ys)]
+        name, (xmin, ymin, xmax, ymax), spans = found
         right = np.array([row[-1][1] if row else np.nan for row in spans])
         left = np.array([row[0][0] if row else np.nan for row in spans])
         ink_rows = ~np.isnan(right)
         for side, profile, target, edge in (
-            (0, (xmax - right) / xheight, hmtx[name][0] * scale - xmax, xmax),
+            (0, (xmax - right) / xheight, face.advance(name) - xmax, xmax),
             (1, (left - xmin) / xheight, xmin, xmin),
         ):
             rows.append({
@@ -228,7 +257,7 @@ def extract(path, font_number=0, letters=LETTERS):
                     [(ymax - ymin) / xheight, (xmax - xmin) / xheight,
                      max(ymax - xheight, 0) / xheight, max(-ymin, 0) / xheight,
                      float(char.isupper()), float(side), _script(char)],
-                    face,
+                    face.features,
                 ]),
             })
     return rows
