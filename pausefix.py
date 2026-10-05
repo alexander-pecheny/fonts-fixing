@@ -43,6 +43,15 @@ def add_pause(font):
     tall = max(y for _, y in play) - min(y for _, y in play)
     bar = round((max(flat(play)) - min(flat(play))) / 4 * height / tall)
 
+    glyph = _bars(left, right, floor, ceiling, slant, bar)
+    glyph.recalcBounds(font["glyf"])
+    _install(font, "uni23F8", glyph, font["hmtx"][cmap[STOP]][0])
+    return bar
+
+
+def _bars(left, right, floor, ceiling, slant, bar):
+    """Two bars `bar` wide with a bar's width between them, centred between `left` and
+    `right` on the upright frame and sheared by `slant`, from `floor` to `ceiling`."""
     pen = TTGlyphPen(None)
     start = left + (right - left - 3 * bar) / 2
     for x in (start, start + 2 * bar):
@@ -52,14 +61,14 @@ def add_pause(font):
         pen.lineTo((high + bar, ceiling))
         pen.lineTo((low + bar, floor))
         pen.closePath()
-    glyph = pen.glyph()
-    glyph.recalcBounds(font["glyf"])
+    return pen.glyph()
 
-    name = "uni23F8"
+
+def _install(font, name, glyph, advance):
+    """Add `glyph` as U+23F8 at the end of the glyph order."""
     font.setGlyphOrder(list(font.getGlyphOrder()) + [name])
     font["glyf"].glyphs[name] = glyph
-    font["hmtx"].metrics[name] = (font["hmtx"][cmap[STOP]][0], glyph.xMin)
+    font["hmtx"].metrics[name] = (advance, glyph.xMin)
     for table in font["cmap"].tables:
         table.cmap[PAUSE] = name
     font["maxp"].numGlyphs = len(font.getGlyphOrder())
-    return bar

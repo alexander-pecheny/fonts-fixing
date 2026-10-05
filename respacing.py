@@ -157,9 +157,34 @@ def fit(font, data, model, scripts=(LETTERS, CYRILLIC + "Ёё")):
     0.429. A pair the model tightens is never held back by the limit.
     """
     read = pair_model.sides(io.BytesIO(data), letters="".join(scripts))
-    kern, letters, face = kerner(data), read["letters"], read["face"]
-    xheight, scale = read["xheight"], read["scale"]  # x-height and units at 1000 to the em
+    kern, xheight, scale = kerner(data), read["xheight"], read["scale"]
+    rows = _pairs(read, kern, scripts)
+    if not rows:
+        return np.array([])
 
+    want = model["model"].predict(np.array([row[-1] for row in rows]))
+    have = np.array([row[3] for row in rows])
+    latin = np.array([not row[0] for row in rows])
+    bias = float((want - have)[latin].mean()) if latin.any() else float((want - have).mean())
+    floor = float(np.percentile(want - bias, NEAREST))  # the model's own tightest fit, rather
+    # than the font's: a face may already draw a pair that touches, and Geist does
+    room = {(row.a, row.b): row.middle_approach - row.approach
+            for alphabet in scripts for row in bands(font, read, kern, alphabet)}
+
+    cmap, values = font.getBestCmap(), {}
+    for (_, a, b, gap, _), target in zip(rows, want):
+        move = _pair_move(target - bias - gap, model["error"], room.get((a, b)), floor - gap)
+        move = _quantise(move * xheight / scale, scale)
+        if move:
+            values[cmap[ord(a)], cmap[ord(b)]] = move
+    add_kern_lookup(font, values)
+    return np.array(list(values.values()))
+
+
+def _pairs(read, kern, scripts):
+    """(script index, a, b, the distance the pair stands at, its features) for every pair."""
+    letters, face = read["letters"], read["face"]
+    xheight, scale = read["xheight"], read["scale"]  # x-height and units at 1000 to the em
     rows = []
     for index, alphabet in enumerate(scripts):
         have = [char for char in alphabet if char in letters]
@@ -170,32 +195,22 @@ def fit(font, data, model, scripts=(LETTERS, CYRILLIC + "Ёё")):
                              first["bearing"][0] + second["bearing"][1]
                              + kern(a, b) * scale / xheight + pair_model.nearest(first, second),
                              pair_model.features(first, second, face)))
-    if not rows:
-        return np.array([])
+    return rows
 
-    want = model["model"].predict(np.array([row[-1] for row in rows]))
-    have = np.array([row[3] for row in rows])
-    latin = np.array([not row[0] for row in rows])
-    bias = float((want - have)[latin].mean()) if latin.any() else float((want - have).mean())
-    noise = model["error"]
-    floor = float(np.percentile(want - bias, NEAREST))  # the model's own tightest fit, rather
-    # than the font's: a face may already draw a pair that touches, and Geist does
 
-    cmap, values = font.getBestCmap(), {}
+def _pair_move(move, noise, room, floor):
+    """A proposed move, less the model's noise in quadrature, opened no further than
+    `room` allows and closed no further than `floor`; all in x-heights."""
+    move = np.sign(move) * np.sqrt(max(move * move - noise * noise, 0.0))
+    if move > 0:
+        move = min(move, max(room if room is not None else move, 0.0))
+    return max(move, floor)
+
+
+def _quantise(units, scale):
+    """Font units, clipped to `LIMIT` and rounded to `QUANTUM`, both quoted at 1000 to the em."""
     step, limit = QUANTUM / scale, LIMIT / scale
-    room = {(row.a, row.b): row.middle_approach - row.approach
-            for alphabet in scripts for row in bands(font, read, kern, alphabet)}
-    for (_, a, b, gap, _), target in zip(rows, want):
-        move = target - bias - gap
-        move = np.sign(move) * np.sqrt(max(move * move - noise * noise, 0.0))
-        if move > 0:
-            move = min(move, max(room.get((a, b), move), 0.0))
-        move = max(move, floor - gap)
-        move = int(round(float(np.clip(move * xheight / scale, -limit, limit)) / step) * step)
-        if move:
-            values[cmap[ord(a)], cmap[ord(b)]] = move
-    add_kern_lookup(font, values)
-    return np.array(list(values.values()))
+    return int(round(float(np.clip(units, -limit, limit)) / step) * step)
 
 
 def tuck(font, data, scripts=(LETTERS, CYRILLIC + "Ёё")):
@@ -235,7 +250,6 @@ def tuck(font, data, scripts=(LETTERS, CYRILLIC + "Ёё")):
     read = pair_model.sides(io.BytesIO(data), letters="".join(scripts))
     kern, xheight, scale = kerner(data), read["xheight"], read["scale"]
     cmap, values = font.getBestCmap(), {}
-    step, limit = QUANTUM / scale, LIMIT / scale
 
     for alphabet in scripts:
         rows = bands(font, read, kern, alphabet)
@@ -247,7 +261,7 @@ def tuck(font, data, scripts=(LETTERS, CYRILLIC + "Ёё")):
             if row.held <= ceiling or row.approach <= row.middle_approach * CEILING:
                 continue  # a pair whose ink comes close somewhere holds no hole
             move = max(ceiling - row.held, floor - row.approach)  # never nearer than the tightest pair
-            move = int(round(float(np.clip(move * xheight / scale, -limit, limit)) / step) * step)
+            move = _quantise(move * xheight / scale, scale)
             if move:
                 values[cmap[ord(row.a)], cmap[ord(row.b)]] = move
     add_kern_lookup(font, values)
@@ -313,14 +327,7 @@ def respace(font, data, model, letters=LETTERS + CYRILLIC + "Ёё"):
     tell apart. A pair collects two sides, so it carries twice that. Subtracting it makes
     small moves vanish and leaves large ones nearly whole.
     """
-    latin = extract(io.BytesIO(data))
-    centre, tracking = centred(latin)  # the font's own Latin tracking, which stays
-    unit = latin[0]["xheight"] * font["head"].unitsPerEm / 1000
-    error = (model.predict(np.array([row["features"] for row in latin])) - centre) * unit
-    which = np.array([row["side"] for row in latin])
-    bias = np.array([error[which == side].mean() for side in (0, 1)])
-    noise = float(np.abs(error - bias[which]).mean())
-
+    tracking, unit, bias, noise = _latin_bias(font, data, model)
     rows = extract(io.BytesIO(data), letters=letters)
     wanted = model.predict(np.array([row["features"] for row in rows])) + tracking
     sides = {}
@@ -328,10 +335,33 @@ def respace(font, data, model, letters=LETTERS + CYRILLIC + "Ёё"):
         move = (value - row["target"]) * unit - bias[row["side"]]
         sides.setdefault(row["char"], {})[row["side"]] = np.sign(move) * max(abs(move) - noise, 0)
     chars = [char for char, both in sorted(sides.items()) if len(both) == 2]
-
     proposed = [np.array([sides[c][side] for c in chars]) for side in (0, 1)]
 
-    kern = kerner(data)
+    right, left = _floored(font, kerner(data), chars, proposed)
+    held = float(np.mean([np.abs(part - was).mean() for part, was in zip((right, left), proposed)]))
+    moves = _with_twins(font, {font.getBestCmap()[ord(c)]: (round(left[i]), round(right[i]))
+                               for i, c in enumerate(chars)})
+    shift(font, moves)
+    return np.array([v for pair in moves.values() for v in pair]), held, noise
+
+
+def _latin_bias(font, data, model):
+    """What `respace` reads off the face's own Latin: its tracking, the size of an
+    x-height in font units, the model's mean disagreement on each side, and the noise
+    left once that is taken off."""
+    latin = extract(io.BytesIO(data))
+    centre, tracking = centred(latin)  # the font's own Latin tracking, which stays
+    unit = latin[0]["xheight"] * font["head"].unitsPerEm / 1000
+    error = (model.predict(np.array([row["features"] for row in latin])) - centre) * unit
+    which = np.array([row["side"] for row in latin])
+    bias = np.array([error[which == side].mean() for side in (0, 1)])
+    noise = float(np.abs(error - bias[which]).mean())
+    return tracking, unit, bias, noise
+
+
+def _floored(font, kern, chars, proposed):
+    """The proposed right and left moves, widened until no pair comes nearer than the
+    tightest pair the face already sets, half the shortfall to each side a round."""
     room = clearances(font, kern, chars)
     floor = np.minimum(np.percentile(room[np.isfinite(room)], NEAREST), room)
     right, left = (part.copy() for part in proposed)
@@ -341,16 +371,18 @@ def respace(font, data, model, letters=LETTERS + CYRILLIC + "Ёё"):
             break
         right += np.clip(short.max(axis=1), 0, None) / 2
         left += np.clip(short.max(axis=0), 0, None) / 2
-    held = float(np.mean([np.abs(part - was).mean() for part, was in zip((right, left), proposed)]))
+    return right, left
 
-    cmap, glyf = font.getBestCmap(), font["glyf"]
-    moves = {cmap[ord(c)]: (round(left[i]), round(right[i])) for i, c in enumerate(chars)}
-    for name in list(moves):  # a letter the font draws as another letter is that letter,
+
+def _with_twins(font, moves):
+    """A letter the font draws as another letter is that letter, and must not drift off
+    it by the units the model reads per script: it takes the other's move."""
+    glyf = font["glyf"]
+    for name in list(moves):
         parts = glyf[name].components if glyf[name].isComposite() else []
-        if len(parts) == 1 and parts[0].glyphName in moves:  # and must not drift off it by
-            moves[name] = moves[parts[0].glyphName]  # the units the model reads per script
-    shift(font, moves)
-    return np.array([v for pair in moves.values() for v in pair]), held, noise
+        if len(parts) == 1 and parts[0].glyphName in moves:
+            moves[name] = moves[parts[0].glyphName]
+    return moves
 
 
 def models():

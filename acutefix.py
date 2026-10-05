@@ -273,11 +273,25 @@ def add_acute_anchors(
 
     mx = pointing_tip(gs, mark) if point_at_center else rec.MarkAnchor.XCoordinate
     marks = {mark: (cls, ob.buildAnchor(mx, rec.MarkAnchor.YCoordinate))}
-    for name in extra_marks:
-        other = st.MarkArray.MarkRecord[st.MarkCoverage.glyphs.index(name)]
+    marks.update(_extra_marks(st, cls, extra_marks))
+    _append_mark_lookup(font, marks, bases)
+    return sorted(bases)
+
+
+def _extra_marks(subtable, cls, names):
+    """Other acutes the new bases carry too, each at the anchor the font gives it."""
+    marks = {}
+    for name in names:
+        other = subtable.MarkArray.MarkRecord[subtable.MarkCoverage.glyphs.index(name)]
         if other.Class != cls:
             raise SystemExit(f"{name} is in mark class {other.Class}, not {cls}")
         marks[name] = (cls, ob.buildAnchor(other.MarkAnchor.XCoordinate, other.MarkAnchor.YCoordinate))
+    return marks
+
+
+def _append_mark_lookup(font, marks, bases):
+    """A mark-to-base lookup for `marks` over `bases`, added to the `mark` feature, with
+    the bases classed as base glyphs."""
     lookup = ob.buildLookup(
         [ob.buildMarkBasePosSubtable(marks, bases, font.getReverseGlyphMap())],
         flags=0,
@@ -293,4 +307,3 @@ def add_acute_anchors(
     classdefs = font["GDEF"].table.GlyphClassDef.classDefs
     for g in bases:
         classdefs[g] = 1
-    return sorted(bases)

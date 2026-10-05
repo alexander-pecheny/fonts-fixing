@@ -170,30 +170,8 @@ def add_kern_lookup(font, pairs):
         return 0
     gpos = font["GPOS"].table
     gid = {name: i for i, name in enumerate(font.getGlyphOrder())}
-    seconds = {}
-    for (a, b), value in pairs.items():
-        seconds.setdefault(a, []).append((b, value))
-
-    pair_pos = ot.PairPos()
-    pair_pos.Format, pair_pos.ValueFormat1, pair_pos.ValueFormat2 = 1, 0x0004, 0
-    pair_pos.Coverage = ot.Coverage()
-    pair_pos.Coverage.glyphs = sorted(seconds, key=gid.get)
-    pair_pos.PairSet = []
-    for first in pair_pos.Coverage.glyphs:
-        pair_set = ot.PairSet()
-        pair_set.PairValueRecord = []
-        for second, value in sorted(seconds[first], key=lambda pair: gid[pair[0]]):
-            record = ot.PairValueRecord()
-            record.SecondGlyph, record.Value2 = second, None
-            record.Value1 = ot.ValueRecord()
-            record.Value1.XAdvance = value
-            pair_set.PairValueRecord.append(record)
-        pair_set.PairValueCount = len(pair_set.PairValueRecord)
-        pair_pos.PairSet.append(pair_set)
-    pair_pos.PairSetCount = len(pair_pos.PairSet)
-
     extension = ot.ExtensionPos()
-    extension.Format, extension.ExtensionLookupType, extension.ExtSubTable = 1, 2, pair_pos
+    extension.Format, extension.ExtensionLookupType, extension.ExtSubTable = 1, 2, _pair_pos(pairs, gid)
     lookup = ot.Lookup()
     lookup.LookupType, lookup.LookupFlag = 9, 0
     lookup.SubTable, lookup.SubTableCount = [extension], 1
@@ -206,3 +184,31 @@ def add_kern_lookup(font, pairs):
             record.Feature.LookupListIndex.append(index)
             record.Feature.LookupCount = len(record.Feature.LookupListIndex)
     return len(pairs)
+
+
+def _pair_pos(pairs, gid):
+    """A format 1 pair adjustment holding `{(first, second): x advance}`, in glyph order."""
+    seconds = {}
+    for (a, b), value in pairs.items():
+        seconds.setdefault(a, []).append((b, value))
+    pair_pos = ot.PairPos()
+    pair_pos.Format, pair_pos.ValueFormat1, pair_pos.ValueFormat2 = 1, 0x0004, 0
+    pair_pos.Coverage = ot.Coverage()
+    pair_pos.Coverage.glyphs = sorted(seconds, key=gid.get)
+    pair_pos.PairSet = []
+    for first in pair_pos.Coverage.glyphs:
+        pair_set = ot.PairSet()
+        pair_set.PairValueRecord = [_x_advance(second, value)
+                                    for second, value in sorted(seconds[first], key=lambda pair: gid[pair[0]])]
+        pair_set.PairValueCount = len(pair_set.PairValueRecord)
+        pair_pos.PairSet.append(pair_set)
+    pair_pos.PairSetCount = len(pair_pos.PairSet)
+    return pair_pos
+
+
+def _x_advance(second, value):
+    record = ot.PairValueRecord()
+    record.SecondGlyph, record.Value2 = second, None
+    record.Value1 = ot.ValueRecord()
+    record.Value1.XAdvance = value
+    return record

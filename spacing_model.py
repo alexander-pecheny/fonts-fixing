@@ -77,21 +77,7 @@ def _side_features(profile, ink_rows, ink):
     """
     band = np.minimum(np.nan_to_num(profile, nan=DEPTH), DEPTH)
     deep = np.minimum(np.nan_to_num(profile, nan=FAR), FAR)
-    own = np.minimum(profile[ink_rows], DEPTH) if ink_rows.any() else np.full(2, DEPTH)
-    own = own[~np.isnan(own)]
-    if not len(own):
-        own = np.full(2, DEPTH)
-
-    # After TypeFacet's intrusion tolerance: how far in can a line be drawn before more
-    # than a given depth of ink pokes past it? A serif intrudes on a corridor a stem never
-    # would, and reading the side at several tolerances tells the two apart.
-    intrusion = []
-    depths = np.linspace(own.min(), own.min() + INTRUSION_REACH, INTRUSION_STEPS)
-    poked = np.maximum(depths[:, None] - own[None, :], 0).mean(axis=1) * (own.max() - own.min() + 1e-6)
-    for allowed in INTRUSION_TOLERANCES:
-        beyond = depths[poked <= allowed]
-        intrusion.append(float(beyond.max()) if len(beyond) else float(own.min()))
-
+    own = _own_rows(profile, ink_rows)
     across = _profile(own, OWN)
     slope = np.diff(across)  # a diagonal side slopes steadily; a stem does not
     near = own.min() + 0.03
@@ -116,10 +102,30 @@ def _side_features(profile, ink_rows, ink):
             float(np.abs(slope).mean()), float(slope.mean()),
             float(np.sum((own[1:-1] < own[:-2]) & (own[1:-1] < own[2:]))),  # notches, ie serifs
         ],
-        intrusion,
+        _intrusion(own),
         [float((deep >= DEPTH).mean()), deep.mean(), deep.max()],  # what stands beyond the cap
         ink,
     ])
+
+
+def _own_rows(profile, ink_rows):
+    """The side's profile on the rows where the letter has ink, capped at `DEPTH`."""
+    own = np.minimum(profile[ink_rows], DEPTH) if ink_rows.any() else np.full(2, DEPTH)
+    own = own[~np.isnan(own)]
+    return own if len(own) else np.full(2, DEPTH)
+
+
+def _intrusion(own):
+    """After TypeFacet's intrusion tolerance: how far in can a line be drawn before more
+    than a given depth of ink pokes past it? A serif intrudes on a corridor a stem never
+    would, and reading the side at several tolerances tells the two apart."""
+    depths = np.linspace(own.min(), own.min() + INTRUSION_REACH, INTRUSION_STEPS)
+    poked = np.maximum(depths[:, None] - own[None, :], 0).mean(axis=1) * (own.max() - own.min() + 1e-6)
+    intrusion = []
+    for allowed in INTRUSION_TOLERANCES:
+        beyond = depths[poked <= allowed]
+        intrusion.append(float(beyond.max()) if len(beyond) else float(own.min()))
+    return intrusion
 
 
 def _side_ink(spans, ys, edge, side, xheight):
