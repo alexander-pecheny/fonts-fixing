@@ -267,6 +267,17 @@ Geist does. As drawn it brings 16 Cyrillic pairs and 16 Latin within 30 units of
 floor comes out negative, since Ty and rn overlap in any face with serifs, and the pass
 allows exactly as much overlap as the model expects.
 
+The pass also has a ceiling, and Noto Sans is why. The model reads two diagonals that run
+side by side, У against А or Д, as a pair set too close, and on Noto it asked for УА, УД
+and Уд 100 units looser, as far as a kern may go. The eye reads such a channel by its
+width, which is the nearest approach all the way down, so УДАЧА and Удалось came out with
+holes. Noto had set УД at 0.71 of the middle approach of its band, and the move took it to
+1.42. So an opening may not take a pair's ink further off than the middle pair of its band
+comes, the limit `build_literata_uniform.py` arrived at for ов. Tightening is not limited.
+The bar `tuck` uses, 1.55 times the middle, was tried first and let УД through. In Noto's
+Regular the ceiling cuts 1,547 kerned pairs to 1,128. e|v still opens from 31 units to
+57, which is what "believe" needed.
+
 ## The hole after Г
 
 Both models above answer to a corpus, and there is one place where that corpus is not

@@ -18,6 +18,7 @@ fitted on is not worth following.
 """
 
 import io
+from typing import NamedTuple
 
 import numpy as np
 from fontTools.ttLib.tables import otTables as ot
@@ -134,6 +135,21 @@ def fit(font, data, model, scripts=(LETTERS, CYRILLIC + "Ёё")):
     to the model's own error is a rounding, while a 15-unit move is nothing but error
     and still goes to zero. Last, nothing may end up closer at its nearest approach than
     the tightest pair the model itself asks for anywhere in the font.
+
+    Nor may an opening take a pair's ink further off than the middle pair of its band
+    comes. The model reads two diagonals that run side by side as a pair set too close,
+    and on Noto Sans it asked for УА, УД and Уд 100 units looser, the most `LIMIT`
+    allows, and for YA 55. The eye reads such a channel by its width, which is its
+    nearest approach all the way down: Noto had set УД at 0.71 of its band's middle
+    approach and Уд at 1.03, the model took them to 1.42 and 1.77, and УДАЧА and
+    Удалось came out with holes. `tuck` cannot pull these back, since the white they
+    hold is a narrow strip and its mean stays under the cap. `tuck`'s own bar, `CEILING`
+    times the middle, was tried here first and still let УД through at 1.42. The middle
+    itself is the limit `build_literata_uniform.py` arrived at for the same reason. The
+    blurred-page score in that script prefers the uncapped build, 0.385 against 0.393 on
+    two ЧГК packets, because a diagonal channel never lets the blurred line go light;
+    that is the blind spot the README describes for ов. Both builds beat stock Noto's
+    0.429. A pair the model tightens is never held back by the limit.
     """
     read = pair_model.sides(io.BytesIO(data), letters="".join(scripts))
     kern, letters, face = kerner(data), read["letters"], read["face"]
@@ -162,9 +178,13 @@ def fit(font, data, model, scripts=(LETTERS, CYRILLIC + "Ёё")):
 
     cmap, values = font.getBestCmap(), {}
     step, limit = QUANTUM / scale, LIMIT / scale
+    room = {(row.a, row.b): row.middle_approach - row.approach
+            for alphabet in scripts for row in bands(font, read, kern, alphabet)}
     for (_, a, b, gap, _), target in zip(rows, want):
         move = target - bias - gap
         move = np.sign(move) * np.sqrt(max(move * move - noise * noise, 0.0))
+        if move > 0:
+            move = min(move, max(room.get((a, b), move), 0.0))
         move = max(move, floor - gap)
         move = int(round(float(np.clip(move * xheight / scale, -limit, limit)) / step) * step)
         if move:
@@ -208,45 +228,69 @@ def tuck(font, data, scripts=(LETTERS, CYRILLIC + "Ёё")):
     pair whose ink has furthest to travel before it touches.
     """
     read = pair_model.sides(io.BytesIO(data), letters="".join(scripts))
-    kern, letters = kerner(data), read["letters"]
-    xheight, scale = read["xheight"], read["scale"]
+    kern, xheight, scale = kerner(data), read["xheight"], read["scale"]
     cmap, values = font.getBestCmap(), {}
     step, limit = QUANTUM / scale, LIMIT / scale
 
     for alphabet in scripts:
-        have = [char for char in alphabet if char in letters and ord(char) in cmap]
-        # the profiles are resampled to a fixed grid and read a pair whose ink meets at the
-        # very edge of the band, е against Э, as further apart than it is; the floor below
-        # has to be exact, so it comes off the scanlines
-        room = clearances(font, kern, have) * scale / xheight  # font units into x-heights
-        rows = []
-        for i, a in enumerate(have):
-            for j, b in enumerate(have):
-                first, second = letters[a], letters[b]
-                joint = np.minimum(first["right"], pair_model.WIDE) + np.minimum(second["left"], pair_model.WIDE)
-                seen = joint[~np.isnan(joint)]
-                if len(seen) < 3 or not np.isfinite(room[i, j]):
-                    continue
-                gap = first["bearing"][0] + second["bearing"][1] + kern(a, b) * scale / xheight
-                rows.append((a, b, gap + float(seen.mean()),
-                             len(seen) / len(joint) * SPAN, room[i, j]))
+        rows = bands(font, read, kern, alphabet)
         if not rows:
             continue
-        white = np.array([row[2] for row in rows])
-        near = np.array([row[4] for row in rows])
-        share = np.array([row[3] for row in rows])
-        floor = float(np.percentile(near, NEAREST))
-        for a, b, held, band, approach in rows:
-            group = np.abs(share - band) <= SHARED
-            ceiling = float(np.median(white[group])) * CEILING
-            if held <= ceiling or approach <= float(np.median(near[group])) * CEILING:
+        floor = float(np.percentile([row.approach for row in rows], NEAREST))
+        for row in rows:
+            ceiling = row.middle_held * CEILING
+            if row.held <= ceiling or row.approach <= row.middle_approach * CEILING:
                 continue  # a pair whose ink comes close somewhere holds no hole
-            move = max(ceiling - held, floor - approach)  # never nearer than the tightest pair
+            move = max(ceiling - row.held, floor - row.approach)  # never nearer than the tightest pair
             move = int(round(float(np.clip(move * xheight / scale, -limit, limit)) / step) * step)
             if move:
-                values[cmap[ord(a)], cmap[ord(b)]] = move
+                values[cmap[ord(row.a)], cmap[ord(row.b)]] = move
     add_kern_lookup(font, values)
     return np.array(list(values.values()))
+
+
+class Band(NamedTuple):
+    a: str
+    b: str
+    held: float
+    approach: float
+    middle_held: float
+    middle_approach: float
+
+
+def bands(font, read, kern, alphabet):
+    """Each pair's white and nearest approach, and the middle of both across its band.
+
+    The white is the gap plus the mean of the joint profile; the approach is how near the
+    ink comes anywhere, kerning included. The band is the pairs that share the pair's
+    height, for the reasons `tuck` gives. All in x-heights.
+    """
+    letters, xheight, scale, cmap = read["letters"], read["xheight"], read["scale"], font.getBestCmap()
+    have = [char for char in alphabet if char in letters and ord(char) in cmap]
+    # the profiles are resampled to a fixed grid and read a pair whose ink meets at the
+    # very edge of the band, е against Э, as further apart than it is; the floor in `tuck`
+    # has to be exact, so the approach comes off the scanlines
+    room = clearances(font, kern, have) * scale / xheight  # font units into x-heights
+    rows = []
+    for i, a in enumerate(have):
+        for j, b in enumerate(have):
+            first, second = letters[a], letters[b]
+            joint = np.minimum(first["right"], pair_model.WIDE) + np.minimum(second["left"], pair_model.WIDE)
+            seen = joint[~np.isnan(joint)]
+            if len(seen) < 3 or not np.isfinite(room[i, j]):
+                continue
+            gap = first["bearing"][0] + second["bearing"][1] + kern(a, b) * scale / xheight
+            rows.append((a, b, gap + float(seen.mean()), len(seen) / len(joint) * SPAN, room[i, j]))
+    if not rows:
+        return []
+    white = np.array([row[2] for row in rows])
+    share = np.array([row[3] for row in rows])
+    near = np.array([row[4] for row in rows])
+    out = []
+    for a, b, held, band, approach in rows:
+        group = np.abs(share - band) <= SHARED
+        out.append(Band(a, b, held, approach, float(np.median(white[group])), float(np.median(near[group]))))
+    return out
 
 
 def respace(font, data, model, letters=LETTERS + CYRILLIC + "Ёё"):
