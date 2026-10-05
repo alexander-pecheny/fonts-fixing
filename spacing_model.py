@@ -40,6 +40,10 @@ ROWS = 10  # units between scanlines at 1000 upem
 SCRIPTS = ((0x0000, 0x024F, 0.0), (0x0370, 0x03FF, 2.0), (0x0400, 0x04FF, 1.0))
 ZONES = 4  # vertical bands the ink beside a side is counted in
 STRIPS = (0.06, 0.18, 0.40)  # of x-height, how far from the edge that ink is counted
+# A side's intrusion is read at these tolerances (x-heights of ink past the line, averaged
+# down the side), on lines drawn up to INTRUSION_REACH x-heights in, INTRUSION_STEPS apart.
+INTRUSION_TOLERANCES = (0.002, 0.006, 0.015, 0.04)
+INTRUSION_REACH, INTRUSION_STEPS = 0.5, 60
 
 
 def _script(char):
@@ -82,9 +86,9 @@ def _side_features(profile, ink_rows, ink):
     # than a given depth of ink pokes past it? A serif intrudes on a corridor a stem never
     # would, and reading the side at several tolerances tells the two apart.
     intrusion = []
-    for allowed in (0.002, 0.006, 0.015, 0.04):
-        depths = np.linspace(own.min(), own.min() + 0.5, 60)
-        poked = np.maximum(depths[:, None] - own[None, :], 0).mean(axis=1) * (own.max() - own.min() + 1e-6)
+    depths = np.linspace(own.min(), own.min() + INTRUSION_REACH, INTRUSION_STEPS)
+    poked = np.maximum(depths[:, None] - own[None, :], 0).mean(axis=1) * (own.max() - own.min() + 1e-6)
+    for allowed in INTRUSION_TOLERANCES:
         beyond = depths[poked <= allowed]
         intrusion.append(float(beyond.max()) if len(beyond) else float(own.min()))
 

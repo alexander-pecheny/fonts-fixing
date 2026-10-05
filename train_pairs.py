@@ -23,7 +23,7 @@ from sklearn.model_selection import GroupKFold
 
 import pair_model
 from spacing_model import CYRILLIC, LETTERS, care
-from train_spacing import EXCLUDE, KERNS, NOT_TEXT, ROOTS, TRUSTED, faces
+from train_spacing import EXCLUDE, KERNS, NOT_TEXT, TRUSTED, faces
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MODEL = os.path.join(HERE, "pair-model.joblib")
@@ -43,8 +43,9 @@ def one(job):
     if not read or len(read["letters"]) < 40:
         return []
 
-    from spacing import kerner
     from fontTools.ttLib import TTFont
+
+    from spacing import kerner
     with open(path, "rb") as handle:
         kern = kerner(handle.read())
     family = (TTFont(path, fontNumber=index, lazy=True)["name"].getDebugName(16) or path).lower()

@@ -97,6 +97,13 @@ def shift(font, moves):
 
 def _shift_anchors(font, dx):
     """Anchors are glyph coordinates, so they move with the glyph they belong to."""
+    for name, anchor in _glyph_anchors(font):
+        if anchor is not None and dx.get(name):
+            anchor.XCoordinate += dx[name]
+
+
+def _glyph_anchors(font):
+    """Every (glyph, anchor) a base or cursive attachment places on a glyph's outline."""
     if "GPOS" not in font:
         return
     for lookup in font["GPOS"].table.LookupList.Lookup:
@@ -104,14 +111,10 @@ def _shift_anchors(font, dx):
             subtable = getattr(subtable, "ExtSubTable", subtable)
             if isinstance(subtable, ot.MarkBasePos):
                 for name, record in zip(subtable.BaseCoverage.glyphs, subtable.BaseArray.BaseRecord):
-                    for anchor in record.BaseAnchor:
-                        if anchor is not None and dx.get(name):
-                            anchor.XCoordinate += dx[name]
+                    yield from ((name, anchor) for anchor in record.BaseAnchor)
             elif isinstance(subtable, ot.CursivePos):
                 for name, record in zip(subtable.Coverage.glyphs, subtable.EntryExitRecord):
-                    for anchor in (record.EntryAnchor, record.ExitAnchor):
-                        if anchor is not None and dx.get(name):
-                            anchor.XCoordinate += dx[name]
+                    yield from ((name, anchor) for anchor in (record.EntryAnchor, record.ExitAnchor))
 
 
 def fit(font, data, model, scripts=(LETTERS, CYRILLIC + "Ёё")):

@@ -54,8 +54,8 @@ def main():
             rows.append((spec, spec))
 
     lines = [
-        f"#set page(width: auto, height: auto, margin: 24pt)",
-        f'#set text(size: 11pt, lang: "ru")',
+        "#set page(width: auto, height: auto, margin: 24pt)",
+        '#set text(size: 11pt, lang: "ru")',
     ]
     body = args.words if args.no_accents else f"{UPPER_ROW} \\ {LOWER_ROW} \\ {args.words}"
     for family, caption in rows:
