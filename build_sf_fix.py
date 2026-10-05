@@ -29,15 +29,17 @@ The system copy is under SIP; point Firefox at this one instead (README.md).
 import os
 from copy import deepcopy
 
+import numpy as np
 from fontTools.otlLib import builder as ob
 from fontTools.pens.boundsPen import BoundsPen
 from fontTools.ttLib import TTFont
 from fontTools.ttLib.tables._g_l_y_f import GlyphCoordinates
 from fontTools.ttLib.tables.TupleVariation import TupleVariation
 from fontTools.varLib.models import supportScalar
-import numpy as np
 
+import naming
 from acutefix import ACUTE, bowl_center
+from naming import set_names
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DST = os.path.join(HERE, "scratchpad", "sf")
@@ -160,17 +162,15 @@ def build(src, style):
     for tag in ("appl", "bild"):  # Apple's signature: a copy that fails it is hidden from the font list
         font["meta"].data.pop(tag, None)
     ps = f"SFProFix-{style}"
-    name = font["name"]
-    strings = {1: FAMILY, 2: style, 3: f"{ps};acute", 4: f"{FAMILY} {style}", 6: ps, 16: FAMILY, 17: style}
     # The localised "System Font" and the .SFNS instance names would pass for the real system font.
-    for nid in (1, 2, 4, 16, 17, 21, 22, 25):
-        name.removeNames(nameID=nid)
-    for rec in name.names:
+    for rec in font["name"].names:
         if rec.toUnicode().startswith(".SFNS-"):
             rec.string = rec.toUnicode().replace(".SFNS-", "SFProFix-", 1)
-    for nid, value in strings.items():
-        name.setName(value, nid, 3, 1, 0x409)
-        name.setName(value, nid, 1, 0, 0)
+    set_names(font, {naming.FAMILY: FAMILY, naming.SUBFAMILY: style, naming.UNIQUE_ID: f"{ps};acute",
+                     naming.FULL_NAME: f"{FAMILY} {style}", naming.POSTSCRIPT: ps,
+                     naming.TYPO_FAMILY: FAMILY, naming.TYPO_SUBFAMILY: style},
+              drop=(naming.FAMILY, naming.SUBFAMILY, naming.FULL_NAME, naming.TYPO_FAMILY, naming.TYPO_SUBFAMILY,
+                    naming.WWS_FAMILY, naming.WWS_SUBFAMILY, naming.VARIATIONS_PREFIX))
     os.makedirs(DST, exist_ok=True)
     out = os.path.join(DST, f"{ps}.ttf")
     font.save(out)

@@ -19,12 +19,12 @@ are respaced together and every glyph built on a moved one follows it.
 
 import os
 
-import joblib
 from fontTools.ttLib import TTCollection
 
 from acutefix import add_acute_anchors, enable_features
+from naming import rename_family
 from pausefix import add_pause
-from respacing import space, summary
+from respacing import models, space, summary
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.expanduser("~/Library/Fonts/Inter.ttc")
@@ -37,27 +37,15 @@ def fix(font):
     return enable_features(font, "cyrl"), add_acute_anchors(font), add_pause(font)
 
 
-def rename(font):
-    name = font["name"]
-    for rec in name.names:
-        if rec.nameID in (1, 4, 16):
-            name.setName(str(rec).replace("Inter", "Inter Fix"), rec.nameID,
-                         rec.platformID, rec.platEncID, rec.langID)
-        elif rec.nameID in (3, 6):
-            name.setName(str(rec).replace("Inter", "InterFix"), rec.nameID,
-                         rec.platformID, rec.platEncID, rec.langID)
-
-
 def main():
     os.makedirs(DST, exist_ok=True)
-    model = joblib.load(os.path.join(HERE, "spacing-model.joblib"))
-    pairs = joblib.load(os.path.join(HERE, "pair-model.joblib"))
+    model, pairs = models()
     collection = TTCollection(SRC)
     for font in collection.fonts:
         added, anchors, bar = fix(font)
         stats = space(font, model, pairs)
         style = font["name"].getDebugName(4)
-        rename(font)
+        rename_family(font, "Inter", "Inter Fix")
         print(f"{style:32s} cyrl +{','.join(added) or 'nothing'}  "
               f"anchors +{' '.join(anchors) or '0'}  pause {bar}  {summary(stats)}", flush=True)
     collection.save(os.path.join(DST, "InterFix.ttc"))

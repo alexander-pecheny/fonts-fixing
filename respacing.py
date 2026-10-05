@@ -18,8 +18,10 @@ fitted on is not worth following.
 """
 
 import io
+import os
 from typing import NamedTuple
 
+import joblib
 import numpy as np
 from fontTools.ttLib.tables import otTables as ot
 
@@ -346,6 +348,13 @@ def respace(font, data, model, letters=LETTERS + CYRILLIC + "Ёё"):
             moves[name] = moves[parts[0].glyphName]  # the units the model reads per script
     shift(font, moves)
     return np.array([v for pair in moves.values() for v in pair]), held, noise
+
+
+def models():
+    """The two fitted models `space` takes: sidebearings, then pairs."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    return (joblib.load(os.path.join(here, "spacing-model.joblib")),
+            joblib.load(os.path.join(here, "pair-model.joblib")))
 
 
 def space(font, model, pairs):

@@ -26,7 +26,13 @@ import urllib.request
 from fontTools.ttLib import TTFont
 from fontTools.ttLib.tables import ttProgram
 
-from acutefix import add_acute_anchors, bowl_center, case_acute_after_capitals, recenter_acute
+from acutefix import (
+    add_acute_anchors,
+    bowl_center,
+    case_acute_after_capitals,
+    recenter_acute,
+)
+from naming import rename_family
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 CACHE = os.path.join(HERE, "scratchpad", "spectral")
@@ -63,18 +69,6 @@ def restore_curls(font, donor):
         font["hmtx"][name] = (font["hmtx"][name][0], donor["hmtx"][was][1])
 
 
-def rename(font):
-    name = font["name"]
-    for rec in name.names:
-        if rec.nameID in (1, 4, 16):
-            value = str(rec).replace("Spectral", "Spectral Fix", 1)
-        elif rec.nameID in (3, 6):
-            value = str(rec).replace("Spectral", "SpectralFix")
-        else:
-            continue
-        name.setName(value, rec.nameID, rec.platformID, rec.platEncID, rec.langID)
-
-
 def main():
     dst = os.path.join(HERE, "fonts", "SpectralFix")
     os.makedirs(dst, exist_ok=True)
@@ -85,7 +79,7 @@ def main():
         anchors = add_acute_anchors(font, point_at_center=False, extra_marks=["acutecomb.case"])
         recenter_acute(font, [0x042E, 0x044E], bowl_center)
         capitals = case_acute_after_capitals(font, "acutecomb.case")
-        rename(font)
+        rename_family(font, "Spectral", "Spectral Fix")
         out = os.path.join(dst, f"SpectralFix-{style}.ttf")
         font.save(out)
         print(f"{os.path.basename(out):34s} anchors +{' '.join(anchors)}, {len(capitals)} capitals")

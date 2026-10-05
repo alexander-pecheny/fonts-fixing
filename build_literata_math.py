@@ -26,9 +26,12 @@ from fontTools.pens.recordingPen import DecomposingRecordingPen
 from fontTools.pens.reverseContourPen import ReverseContourPen
 from fontTools.pens.t2CharStringPen import T2CharStringPen
 from fontTools.ttLib import TTFont
-from fontTools.ttLib.tables import otTables
 from fontTools.ttLib.scaleUpem import scale_upem
+from fontTools.ttLib.tables import otTables
 from fontTools.varLib import instancer
+
+import naming
+from naming import set_names
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 STIX = os.path.expanduser("~/Library/Fonts/STIX/STIXTwoMath-Regular.otf")
@@ -155,23 +158,19 @@ def set_top_accents(stix, centers):
 
 
 def rename(font, version):
-    names = [
-        (0, "Literata is copyright 2017 The Literata Project Authors. STIX Two Math is "
-            "copyright 2001-2021 The STIX Fonts Project Authors. Both under the SIL Open Font License."),
-        (1, "Literata Math"),
-        (2, "Regular"),
-        (3, f"{version};LiterataMath-Regular"),
-        (4, "Literata Math"),
-        (5, f"Version {version}"),
-        (6, "LiterataMath-Regular"),
-        (16, "Literata Math"),
-        (17, "Regular"),
-    ]
-    table = font["name"]
-    table.names = [rec for rec in table.names if rec.nameID not in {n for n, _ in names} | {18, 20, 21, 22}]
-    for name_id, value in names:
-        table.setName(value, name_id, 3, 1, 0x409)
-        table.setName(value, name_id, 1, 0, 0)
+    names = {
+        naming.COPYRIGHT: "Literata is copyright 2017 The Literata Project Authors. STIX Two Math is "
+                   "copyright 2001-2021 The STIX Fonts Project Authors. Both under the SIL Open Font License.",
+        naming.FAMILY: "Literata Math",
+        naming.SUBFAMILY: "Regular",
+        naming.UNIQUE_ID: f"{version};LiterataMath-Regular",
+        naming.FULL_NAME: "Literata Math",
+        naming.VERSION: f"Version {version}",
+        naming.POSTSCRIPT: "LiterataMath-Regular",
+        naming.TYPO_FAMILY: "Literata Math",
+        naming.TYPO_SUBFAMILY: "Regular",
+    }
+    set_names(font, names, drop=tuple(names) + naming.INHERITED)
 
 
 def main():

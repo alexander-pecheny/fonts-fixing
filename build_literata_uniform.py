@@ -33,6 +33,7 @@ import re
 import numpy as np
 from fontTools.ttLib import TTFont
 
+from naming import rename_family
 from spacing import BAND, add_kern_lookup, gaussian, kerner, scan, sector_columns
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -141,15 +142,6 @@ def evener(font, data, words):
     return {pair: value for pair, value in values.items() if value}, start, best[0]
 
 
-def rename(font):
-    names = font["name"]
-    for record in names.names:
-        if record.nameID in (1, 3, 4, 6, 16):
-            joined = record.nameID in (3, 6)
-            value = str(record).replace("Literata", "LiterataUniform" if joined else "Literata Uniform")
-            names.setName(value, record.nameID, record.platformID, record.platEncID, record.langID)
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--text", required=True, help="document whose words the font is evened out on")
@@ -163,7 +155,7 @@ def main():
         values, before, after = evener(font, open(path, "rb").read(), words)
         cmap = font.getBestCmap()
         add_kern_lookup(font, {(cmap[ord(a)], cmap[ord(b)]): v for (a, b), v in values.items()})
-        rename(font)
+        rename_family(font, "Literata", "Literata Uniform")
         name = os.path.basename(path).replace("Literata", "LiterataUniform")
         font.save(os.path.join(out, name))
         moves = np.array(list(values.values()))

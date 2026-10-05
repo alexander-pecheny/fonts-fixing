@@ -28,6 +28,7 @@ import re
 import numpy as np
 from fontTools.ttLib import TTFont
 
+from naming import rename_family
 from spacing import add_kern_lookup, kerner, scan
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -97,15 +98,6 @@ def report(path, values):
         print(f"  {''.join(pair)}  {count:5d}  {values[pair]:+3d}")
 
 
-def rename(font):
-    names = font["name"]
-    for record in names.names:
-        if record.nameID in (1, 3, 4, 6, 16):
-            joined = record.nameID in (3, 6)
-            value = str(record).replace("Literata", "LiterataFix" if joined else "Literata Fix")
-            names.setName(value, record.nameID, record.platformID, record.platEncID, record.langID)
-
-
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--text", help="document whose letter pairs to report on")
@@ -118,7 +110,7 @@ def main():
         values, matched = adjustments(font, open(path, "rb").read())
         cmap = font.getBestCmap()
         add_kern_lookup(font, {(cmap[ord(a)], cmap[ord(b)]): v for (a, b), v in values.items()})
-        rename(font)
+        rename_family(font, "Literata", "Literata Fix")
         name = os.path.basename(path).replace("Literata", "LiterataFix")
         font.save(os.path.join(out, name))
 

@@ -57,6 +57,8 @@ import uharfbuzz as hb
 from fontTools.ttLib import TTCollection, TTFont
 from fontTools.ttLib.scaleUpem import scale_upem
 
+from naming import rename_family
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.join(HERE, "fonts", "InterFixRA", "InterFixRA.ttc")
 DST = os.path.join(HERE, "fonts", "Intertica")
@@ -102,14 +104,6 @@ def vertical(font, arial):
     os2.fsSelection &= ~USE_TYPO_METRICS
 
 
-def rename(font):
-    name = font["name"]
-    for rec in name.names:
-        if rec.nameID in (1, 3, 4, 6, 16):
-            renamed = str(rec).replace("Inter Fix RA", "Intertica").replace("InterFixRA", "Intertica")
-            name.setName(renamed, rec.nameID, rec.platformID, rec.platEncID, rec.langID)
-
-
 def main():
     os.makedirs(DST, exist_ok=True)
     arial = {style: TTFont(ARIAL.format("" if style == "Regular" else " " + style))
@@ -121,7 +115,7 @@ def main():
         style = font["name"].getDebugName(4).removeprefix("Inter Fix RA")
         rescale(font)
         vertical(font, arial["Regular"])
-        rename(font)
+        rename_family(font, "Inter Fix RA", "Intertica")
         report = ""
         if style.strip() in target:
             want = target[style.strip()]

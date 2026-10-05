@@ -28,13 +28,12 @@ import shutil
 import urllib.parse
 import urllib.request
 
-import joblib
 import numpy as np
 from fontTools.ttLib import TTFont
 from fontTools.varLib import instancer
 
 from build_literata_uniform import evener
-from respacing import respace
+from respacing import models, respace
 from spacing import add_kern_lookup
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -78,7 +77,7 @@ def publish(font, family, style, folder):
 
 def main():
     words = re.findall(r"[А-Яа-яЁё]+", TEXT)
-    model = joblib.load(os.path.join(HERE, "spacing-model.joblib"))
+    model, _ = models()
     for family in ("Jost Uniform", "Jost Spaced"):
         folder = os.path.join(FONTS, family.replace(" ", ""))
         os.makedirs(folder, exist_ok=True)

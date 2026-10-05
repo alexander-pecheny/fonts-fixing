@@ -22,11 +22,11 @@ with, and it is the one place here where the designer's own kerning is overruled
 import glob
 import os
 
-import joblib
 from fontTools.ttLib import TTFont
 
 from acutefix import enable_features, recenter_acute
-from respacing import space, summary
+from naming import rename_family
+from respacing import models, space, summary
 
 YERY = (0x042B, 0x044B)  # Ы ы — Geist anchors these over the right stroke
 
@@ -35,27 +35,15 @@ SRC = os.path.expanduser("~/Library/Fonts/Geist/ttf/*.ttf")
 DST = os.path.join(HERE, "fonts", "GeistFix")
 
 
-def rename(font):
-    name = font["name"]
-    for rec in name.names:
-        if rec.nameID in (1, 4, 16):
-            name.setName(str(rec).replace("Geist", "Geist Fix"), rec.nameID,
-                         rec.platformID, rec.platEncID, rec.langID)
-        elif rec.nameID in (3, 6):
-            name.setName(str(rec).replace("Geist", "GeistFix"), rec.nameID,
-                         rec.platformID, rec.platEncID, rec.langID)
-
-
 def main():
     os.makedirs(DST, exist_ok=True)
-    model = joblib.load(os.path.join(HERE, "spacing-model.joblib"))
-    pairs = joblib.load(os.path.join(HERE, "pair-model.joblib"))
+    model, pairs = models()
     for src in sorted(glob.glob(SRC)):
         font = TTFont(src)
         added = enable_features(font, "cyrl")
         stats = space(font, model, pairs)
         moved = recenter_acute(font, YERY)
-        rename(font)
+        rename_family(font, "Geist", "Geist Fix")
         out = os.path.join(DST, os.path.basename(src).replace("Geist-", "GeistFix-"))
         font.save(out)
         shifts = " ".join(f"{g} {a}→{b}" for g, a, b in moved)

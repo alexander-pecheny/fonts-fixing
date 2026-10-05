@@ -15,7 +15,9 @@ import os
 from fontTools.ttLib import TTFont
 from fontTools.varLib import instancer
 
+import naming
 from acutefix import add_acute_anchors
+from naming import set_names
 
 SRC = os.path.expanduser(
     "~/Library/Fonts/RobotoFlex[GRAD,XOPQ,XTRA,YOPQ,YTAS,YTDE,YTFI,YTLC,YTUC,opsz,slnt,wdth,wght].ttf"
@@ -35,13 +37,10 @@ STYLES = [
 def rename(font, style, weight, italic):
     ps = f"{PSFAMILY}-{style.replace(' ', '')}"
     full = FAMILY if style == "Regular" else f"{FAMILY} {style}"
-    strings = {1: FAMILY, 2: style, 3: f"{ps};acutefix", 4: full, 6: ps, 16: FAMILY, 17: style}
-    name = font["name"]
-    for nid, value in strings.items():
-        name.setName(value, nid, 3, 1, 0x409)
-        name.setName(value, nid, 1, 0, 0)
-    for nid in (18, 20, 21, 22, 25):
-        name.removeNames(nameID=nid)
+    set_names(font, {naming.FAMILY: FAMILY, naming.SUBFAMILY: style, naming.UNIQUE_ID: f"{ps};acutefix",
+                     naming.FULL_NAME: full, naming.POSTSCRIPT: ps, naming.TYPO_FAMILY: FAMILY,
+                     naming.TYPO_SUBFAMILY: style},
+              drop=naming.INHERITED + (naming.VARIATIONS_PREFIX,))
     os2 = font["OS/2"]
     os2.usWeightClass = weight
     bits = (1 if italic else 0) | (0b100000 if weight >= 700 else 0)

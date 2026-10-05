@@ -19,21 +19,10 @@ import os
 from fontTools.ttLib import TTFont
 
 from acutefix import add_acute_anchors
+from naming import rename_family
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FAMILIES = ["Sans", "Serif"]
-
-
-def rename(font, family):
-    name = font["name"]
-    for rec in name.names:
-        if rec.nameID in (1, 4, 16):
-            value = str(rec).replace(f"IBM Plex {family}", f"IBM Plex {family} Fix")
-        elif rec.nameID in (3, 6):
-            value = str(rec).replace(f"IBMPlex{family}", f"IBMPlex{family}Fix")
-        else:
-            continue
-        name.setName(value, rec.nameID, rec.platformID, rec.platEncID, rec.langID)
 
 
 def main():
@@ -44,7 +33,7 @@ def main():
         for path in sorted(glob.glob(src)):
             font = TTFont(path)
             anchors = add_acute_anchors(font, point_at_center=False)
-            rename(font, family)
+            rename_family(font, f"IBM Plex {family}", f"IBM Plex {family} Fix")
             stem = os.path.basename(path).replace(f"IBMPlex{family}-", f"IBMPlex{family}Fix-")
             out = os.path.join(dst, stem)
             font.save(out)

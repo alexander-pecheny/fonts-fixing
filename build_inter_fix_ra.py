@@ -31,13 +31,13 @@ against the old outline would be kerned against a glyph that is no longer there.
 import copy
 import os
 
-import joblib
 from fontTools.pens.cu2quPen import Cu2QuPen
 from fontTools.pens.ttGlyphPen import TTGlyphPen
 from fontTools.ttLib import TTCollection, TTFont
 
 from build_inter_fix import fix
-from respacing import space, summary
+from naming import rename_family
+from respacing import models, space, summary
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SRC = os.path.expanduser("~/Library/Fonts/Inter.ttc")
@@ -77,21 +77,9 @@ def take(font, donor, name):
     return delta
 
 
-def rename(font):
-    name = font["name"]
-    for rec in name.names:
-        if rec.nameID in (1, 4, 16):
-            name.setName(str(rec).replace("Inter", "Inter Fix RA"), rec.nameID,
-                         rec.platformID, rec.platEncID, rec.langID)
-        elif rec.nameID in (3, 6):
-            name.setName(str(rec).replace("Inter", "InterFixRA"), rec.nameID,
-                         rec.platformID, rec.platEncID, rec.langID)
-
-
 def main():
     os.makedirs(DST, exist_ok=True)
-    model = joblib.load(os.path.join(HERE, "spacing-model.joblib"))
-    pairs = joblib.load(os.path.join(HERE, "pair-model.joblib"))
+    model, pairs = models()
     collection = TTCollection(SRC)
     for font in collection.fonts:
         style = font["name"].getDebugName(4).removeprefix("Inter ")
@@ -103,7 +91,7 @@ def main():
             deltas = [take(font, donor, name) for name in TAKEN]
             report += "  " + "  ".join(f"{n} {d:+d}" for n, d in zip(TAKEN, deltas))
         stats = space(font, model, pairs)
-        rename(font)
+        rename_family(font, "Inter", "Inter Fix RA")
         print(f"{style:24s} {report}  {summary(stats)}", flush=True)
     collection.save(os.path.join(DST, "InterFixRA.ttc"))
 
